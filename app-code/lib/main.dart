@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'login_page.dart';
+import 'login_page.dart';  // Import the login page
+import 'package:firebase_core/firebase_core.dart';  // Import Firebase Core
 
 void main() async {
+  // Ensure that all widgets are fully initialized before running the app
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp();  // Initialize Firebase
   runApp(MyApp());
 }
 
@@ -12,11 +13,25 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Firebase Auth',
+      title: 'Your App',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        colorScheme: ColorScheme.fromSwatch(
+          primarySwatch: Colors.blue,
+        ).copyWith(
+          secondary: Colors.greenAccent,
+        ),
       ),
-      home: LoginPage(),
+      home: MyHomePage(),  // Display the initial page
     );
+  }
+}
+
+class MyHomePage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    // Directly return the LoginPage
+    return LoginPage(colorScheme: colorScheme);
   }
 }
