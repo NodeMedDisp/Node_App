@@ -18,6 +18,12 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
     project.evaluationDependsOn(":app")
+
+    // Ensure all subprojects use Java 21
+    tasks.withType(JavaCompile) {
+        sourceCompatibility = JavaVersion.VERSION_17.toString()
+        targetCompatibility = JavaVersion.VERSION_17.toString()
+    }
 }
 
 tasks.register("clean", Delete) {
