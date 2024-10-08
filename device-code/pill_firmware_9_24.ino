@@ -1,6 +1,11 @@
 #include <Adafruit_LittleFS.h> // Internal Library System
 #include <InternalFileSystem.h> //Internal file system
 
+#include <Adafruit_TinyUSB.h> //Bluetooth and low energy cost function
+#include <bluefruit.h> //BLE
+BLEUart bleuart; // BLE connection to serial port
+String incomingData = ""; // Buffer for incoming data
+
 #include <SPI.h> //SPI for OLED
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -9,12 +14,12 @@
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
-#define OLED_RESET     -1 // Reset pin #
+#define OLED_RESET     10 // Reset pin #
 #define SCREEN_ADDRESS 0x3D ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   while (!Serial); // Wait for serial to initialize
 
   // Power Display
@@ -22,19 +27,34 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Loop forever if screen fails to boot
   }
+  display.clearDisplay();
+
+  // Initialize the BLE module
+  Bluefruit.begin();
+  Bluefruit.setTxPower(4);    // Check if you need to adjust the transmission power
+  Bluefruit.setName("NODE");  // Name your BLE device
+  bleuart.begin();
+
+  // Make discoverable
+  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+  Bluefruit.Advertising.addTxPower();
+  Bluefruit.Advertising.addService(bleuart);
+  Bluefruit.Advertising.start();
 
   // Initialize File system
   if (!InternalFS.begin()) {
     Serial.println("Failed to mount internal flash file system!");
     return;
   }
-
+/*
   // Delete Test File
   if (InternalFS.remove("/test.txt")) {
     Serial.println("File deleted successfully.");
   } else {
     Serial.println("Failed to delete file.");
   }
+
+  Serial.println("Waiting for Bluetooth connection...");
 
   // Open/Create test file
   Adafruit_LittleFS_Namespace::File file = InternalFS.open("/test.txt", Adafruit_LittleFS_Namespace::FILE_O_WRITE);
@@ -64,6 +84,10 @@ void setup() {
   } else {
     Serial.println("Failed to open file for reading.");
   } 
+
+
+
+  */
 }
 
 // Function to display text on screen - pass in as char
@@ -80,6 +104,39 @@ void displayText(const char* text){
   delay(2000); // Display for at least 2 seconds
 }
 
+// Save incoming data to a file
+void saveToFile(String data) {
+  // Remove the EOF marker
+  data.replace("\nEOF", "");
+
+  // Delete old file, if it exists
+  if (InternalFS.exists("/received.txt")) {
+    InternalFS.remove("/received.txt");
+  }
+
+  // Open file to write
+  Adafruit_LittleFS_Namespace::File file = InternalFS.open("/received.txt", Adafruit_LittleFS_Namespace::FILE_O_WRITE);
+  if (file) {
+    file.print(data);  // Write the received data
+    file.close();
+    Serial.println("File written successfully.");
+  } else {
+    Serial.println("Failed to open file for writing.");
+  }
+}
+
 void loop() {
-  // put your main code here, to run repeatedly:
+  // Check if there is data available over BLE
+  while (bleuart.available()) {
+    char c = (char)bleuart.read();
+    incomingData += c;
+  }
+
+  // Check if we received a complete file
+  if (incomingData.endsWith("EOF")) {  // If file ends with EOF
+    saveToFile(incomingData);
+    incomingData = "";  // Reset the buffer after saving
+  }
+
+  displayText(incomingData.c_str());
 }
