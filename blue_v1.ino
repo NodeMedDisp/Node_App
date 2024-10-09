@@ -26,7 +26,12 @@ void setup() {
 void loop() {
   // Check for incoming data from the app
   if (bleuart.available()) {
-    Serial.write(bleuart.read());
+    // Read the incoming message and print it to the Serial Monitor
+    while (bleuart.available()) {
+      char receivedChar = bleuart.read();
+      Serial.print(receivedChar);  // Print each received character to the Serial Monitor
+    }
+    Serial.println();  // Print a newline once the message is fully received
   }
 }
 
