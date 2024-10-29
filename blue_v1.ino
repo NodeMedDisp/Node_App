@@ -1,3 +1,7 @@
+#include <SPI.h>
+
+#include <InternalFileSystem.h>
+
 #include <bluefruit.h>
 
 BLEUart bleuart;  // Create a BLE UART object
