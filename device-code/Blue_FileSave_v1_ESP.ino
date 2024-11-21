@@ -11,15 +11,7 @@
 #include <Adafruit_ILI9341.h>       // For Screen
 
 #define FORMAT_SPIFFS_IF_FAILED true
-/*
-BLEServer *pServer = NULL;
-BLECharacteristic *pCharacteristic = NULL;
-bool deviceConnected = false;
 
-// UUIDs for BLE service and characteristic
-#define SERVICE_UUID        "12345678-1234-5678-1234-56789abcdef0"  // Custom Service UUID
-#define CHARACTERISTIC_UUID "12345678-1234-5678-1234-56789abcdef1"  // Custom Characteristic UUID
-*/
 String incomingData = "";        // Buffer for incoming data
 
 // Variables for storing parsed data from file
@@ -36,11 +28,20 @@ void parseMedicationTime(String timeString);
 #define TFT_DC     16
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
-class MyCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pCharacteristic) {
-    // Using String instead of std::string
-    String rxValue = pCharacteristic->getValue().c_str(); // Convert to String using c_str()
+//Function declaration
+void saveToFile(String data, String file_name);
+void createTestFile();
+void readFile(String file_name);
+void deleteFile(String file_name);
 
+//Bluetooth callback class
+class MyCallbacks : public BLECharacteristicCallbacks {
+  // Handle receiving data
+  void onWrite(BLECharacteristic* pCharacteristic) {
+    // Each value that is received
+    String rxValue = pCharacteristic->getValue().c_str(); // Convert to String using c_str()
+    
+    // If the value is good data, save it
     if (rxValue.length() > 0) {
       Serial.println(rxValue);  // Display the received data
       incomingData += rxValue;
@@ -49,19 +50,72 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       if (incomingData.endsWith("EOF")) {
         Serial.println("Complete message received:");
         Serial.println(incomingData);
+        
+        // Save the data to received file
+        saveToFile(incomingData,"/received.txt");
 
-        // You can call your function here, like saveToFile(incomingData);
+        // Read the file to parse the information
+        readFile("/received.txt");
         
         // Clear the buffer after processing
         incomingData = "";
       }
     }
   }
+  // Handle returning the data
+  void onRead(BLECharacteristic *pCharacteristic) {
+    const char *filename = "/log.txt";
+
+    if (!SPIFFS.exists(filename)) {
+      Serial.println("Send failed: No log file exists");
+      return;
+    }
+
+    File file = SPIFFS.open(filename,"r");
+    if (!file) {
+      Serial.println("Send failed: Failed to open file");
+      return;
+    }
+
+    // Read the file and send in chunks
+    size_t maxChunkSize = 512;
+    char buffer[maxChunkSize + 1];
+
+    while (file.available()) {
+      size_t bytesRead = file.readBytes(buffer, maxChunkSize);
+      buffer[bytesRead] = '\0'; // Null-terminate the string
+
+      // Send the chunks over bluetooth
+      pCharacteristic->setValue((uint8_t *)buffer,bytesRead);
+      pCharacteristic->notify();
+
+      delay(50); // Give delay for processing
+    }
+
+    file.close();
+    Serial.println("File sent successfully");
+  }
 };
+/*
+// Callbacks for connection and disconnection events
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    deviceConnected = true;
+    Serial.println("Device connected");
+  }
+
+  void onDisconnect(BLEServer* pServer) {
+    deviceConnected = false;
+    Serial.println("Device disconnected");
+    // Start advertising again after disconnect
+    pServer->getAdvertising()->start();
+  }
+};
+*/
 
 // This is the setup, everything here is done only once - when the device is turned on
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(256000);
   while (!Serial) delay(10); // Wait for serial to initialize
 
   // Initialize Screen
@@ -70,31 +124,20 @@ void setup() {
   tft.setRotation(3);
   
   //Setup cursor and text on screen
-  tft.setCursor(10, 10);
+  tft.setCursor(10, 400);
   tft.setTextColor(ILI9341_WHITE);
-  tft.setTextSize(2);
-
+  tft.setTextSize(12);
+  tft.println("NODE");
+/*
   // Initialize File system
-
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-        Serial.println("SPIFFS Mount Failed");
-        return;
-    }
-
-  // Delete any existing file
-  if (SPIFFS.exists("/received.txt")) {
-    // Attempt to remove the file
-    if (SPIFFS.remove("/received.txt")) {
-      Serial.println("File deleted successfully!");
+      Serial.println("SPIFFS Mount Failed");
     } else {
-      Serial.println("Failed to delete the file.");
+      Serial.println("SPIFFS Mounted Successfully");
     }
-  } else {
-    Serial.println("File does not exist.");
-  }
-
+  
   // Initialize BLE
-  BLEDevice::init("ESP32_BLE");
+  BLEDevice::init("NODE");
   BLEServer* pServer = BLEDevice::createServer();
   BLEService* pService = pServer->createService(BLEUUID((uint16_t)0xFFE0));
 
@@ -111,13 +154,31 @@ void setup() {
   pAdvertising->start();
   
   Serial.println("Waiting for client connection...");
-
+  
   // Create a file for testing without bluetooth - Comment out if testing bluetooth
   //createTestFile();
 
   // Read the File
-  //readFile();
-  
+  //readFile("/received.txt");
+  */
+}
+
+// Save incoming data to a file
+void saveToFile(String data, String file_name) {
+  data.replace("EOF", "");  // Remove the EOF marker
+
+  // Delete old file, if it exists
+  deleteFile(file_name);
+
+  // Open file to write
+  File file = SPIFFS.open(file_name, "w");
+  if (file) {
+    file.print(data);  // Write the received data
+    file.close();
+    Serial.println("File written successfully.");
+  } else {
+    Serial.println("Failed to open file for writing.");
+  }
 }
 
 // Create a file for testing without bluetooth
@@ -126,7 +187,7 @@ void createTestFile(){
   // Write to file if it was created
   if (file) {
     file.println("Current Time: 2024-11-05 11:34:27"
-      "\nMedication: fcb\nDose: 1\nFrequency: Once daily\nTimes: 11:34 AM\nDays: 1 to 5"
+      "\nMedication: fcb\nDose: 1\nFrequency: Once daily\nTimes: 11:36 AM\nDays: 1 to 5"
       "\nPrompt1: What have you accomplished in the past 24 hours?\nRequired Response: No\nOptions: No options\nDays: 1 to 5");
     file.close();
     Serial.println("File written successfully.");
@@ -136,22 +197,21 @@ void createTestFile(){
 }
 
 // Function to read the file
-void readFile(){
+void readFile(String file_name){
   // Load the file to read times
-  File file = SPIFFS.open("/received.txt", "r");
+  File file = SPIFFS.open(file_name, "r");
 
   // Check if the file opened
   if (!file) {
-    Serial.println("Failed to open received.txt");
+    Serial.println("Failed to open " + file_name);
     return;
   } else {
-    Serial.println("Opened received.txt");
+    Serial.println("Opened " + file_name);
   }
 
   String line;
   while (file.available()) {
     line = file.readStringUntil('\n');
-    tft.println(line);
 
     // Look for the current time and medication time in the file and parse
     if (line.startsWith("Current Time: ")) {
@@ -171,6 +231,20 @@ void readFile(){
   file.close();
 }
 
+void deleteFile(String file_name){
+  // Delete the existing file
+  if (SPIFFS.exists(file_name)) {
+    // Attempt to remove the file
+    if (SPIFFS.remove(file_name)) {
+      Serial.println("File deleted successfully!");
+    } else {
+      Serial.println("Failed to delete the file.");
+    }
+  } else {
+    Serial.println("File does not exist.");
+  }
+}
+
 // Function to initialize the internal clock with the current time from file
 void startClock(String currentTimeString) {
   int year, month, day, hour, minute, second;
@@ -181,119 +255,47 @@ void startClock(String currentTimeString) {
   Serial.println(currentTimeString);
 }
 
+void printTime() {
+  Serial.print("Current Time: ");
+  Serial.print(hour());    // Print current hour
+  Serial.print(":");
+  Serial.print(minute());  // Print current minute
+  Serial.print(":");
+  Serial.println(second());  // Print current second
+}
+
 // Parse medication time and store as reminder time
 void parseMedicationTime(String timeString) {
-  int hour, minute;
+  int h, m;
   char period[3];
-  sscanf(timeString.c_str(), "%d:%d %s", &hour, &minute, period);
+  sscanf(timeString.c_str(), "%d:%d %s", &h, &m, period);
 
   // Adjust for AM/PM format if necessary
-  if (strcmp(period, "PM") == 0 && hour < 12) hour += 12;
-  if (strcmp(period, "AM") == 0 && hour == 12) hour = 0;
+  if (strcmp(period, "PM") == 0 && h < 12) h += 12;
 
   // Set reminder time to today at the parsed hour and minute
-  reminderTime = now() - (hour * SECS_PER_HOUR + minute * SECS_PER_MIN) + (hour * SECS_PER_HOUR + minute * SECS_PER_MIN);
+  reminderTime = now() + ((hour() - h)*60*60) + ((minute() - m) * 60);
   Serial.print("Medication Reminder Set for: ");
-  Serial.print(hour);
+  Serial.print(h);
   Serial.print(":");
-  Serial.println(minute);
+  Serial.println(m);
 }
 
-// Save incoming data to a file
-void saveToFile(String data, String file_name) {
-  data.replace("EOF", "");  // Remove the EOF marker
-
-  // Delete old file, if it exists
-  if (SPIFFS.exists(file_name)) {
-    SPIFFS.remove(file_name);
-  }
-
-  // Open file to write
-  File file = SPIFFS.open(file_name, "w");
-  if (file) {
-    file.print(data);  // Write the received data
-    file.close();
-    Serial.println("File written successfully.");
-  } else {
-    Serial.println("Failed to open file for writing.");
-  }
-}
-/*
-// Callbacks for connection and disconnection events
-class MyServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer* pServer) {
-    deviceConnected = true;
-    Serial.println("Device connected");
-  }
-
-  void onDisconnect(BLEServer* pServer) {
-    deviceConnected = false;
-    Serial.println("Device disconnected");
-    // Start advertising again after disconnect
-    pServer->getAdvertising()->start();
-  }
-};
-
-// Callback for handling incoming data
-class MyCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) {
-    String value = String(pCharacteristic->getValue().c_str());
-    if (value.length() > 0) {
-      incomingData = String(value.c_str());
-      Serial.print("Received data: ");
-      Serial.println(incomingData);
-
-      // Check if the incoming data contains EOF
-      if (incomingData.endsWith("EOF")) {
-        Serial.println("Saving File");
-        saveToFile(incomingData, "/received.txt");
-        incomingData = "";  // Clear buffer after saving
-      }
-    }
-  }
-};
-*/
 // This is the run stage, everything here keeps happening, forever.
 void loop() {
-
+  
+  Serial.print("Now: ");
+  printTime();
+  Serial.println(reminderTime);
   // Update time and check if it's time for the reminder
-  if (now() >= reminderTime && now() < reminderTime + SECS_PER_MIN) {  // If it's the reminder time within a minute
-    Serial.println("Time to take your meds");
-    delay(10000); // Wait 10 seconds before checking again
-  }
-}
+  if (now() >= reminderTime && now() < reminderTime + 60) {  // If it's the reminder time within a minute
+    tft.fillScreen(ILI9341_BLACK);
+    tft.setTextSize(5);
+    tft.println("Time to take your meds");
+    tft.println("Press the button below to dispense");
+    delay(60000); // Wait 60
 
-/*
-#include <BluetoothSerial.h>
- 
-#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
-#endif
- 
-#if !defined(CONFIG_BT_SPP_ENABLED)
-#error Serial Bluetooth not available or not enabled. It is only available for the ESP32 chip.
-#endif
- 
-BluetoothSerial SerialBT;
- 
-#define BT_DISCOVER_TIME  10000
-static bool btScanSync = true;
- 
-void setup() {
-  Serial.begin(115200);
-  SerialBT.begin("ESP32test"); //Bluetooth device name
-  Serial.println("The device started, now you can pair it with bluetooth!");
-  if (btScanSync) {
-    Serial.println("Starting discover...");
-    BTScanResults *pResults = SerialBT.discover(BT_DISCOVER_TIME);
-    if (pResults)
-      pResults->dump(&Serial);
-    else
-      Serial.println("Error on BT Scan, no result!");
+    
   }
+  delay(10000); // Wait 10 seconds before checking again
 }
- 
-void loop() {
-  delay(100);
-}
-*/
