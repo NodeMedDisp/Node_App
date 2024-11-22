@@ -13,14 +13,11 @@
 #define FORMAT_SPIFFS_IF_FAILED true
 
 String incomingData = "";        // Buffer for incoming data
+BLECharacteristic *pCharacteristic;
 
 // Variables for storing parsed data from file
 time_t currentTime;       // Parsed current time from file
 time_t reminderTime;      // Parsed medication reminder time
-
-// Function prototypes
-void startClock(String currentTimeString);
-void parseMedicationTime(String timeString);
 
 // Screen Initialization
 #define TFT_CS     5
@@ -33,6 +30,8 @@ void saveToFile(String data, String file_name);
 void createTestFile();
 void readFile(String file_name);
 void deleteFile(String file_name);
+void startClock(String currentTimeString);
+void parseMedicationTime(String timeString);
 
 //Bluetooth callback class
 class MyCallbacks : public BLECharacteristicCallbacks {
@@ -63,38 +62,35 @@ class MyCallbacks : public BLECharacteristicCallbacks {
     }
   }
   // Handle returning the data
-  void onRead(BLECharacteristic *pCharacteristic) {
-    const char *filename = "/log.txt";
+  public:
+    void sendFile(BLECharacteristic *pCharacteristic, const char *filename) {
+      if (!SPIFFS.exists(filename)) {
+        Serial.println("Send failed: No log file exists");
+        return;
+      }
 
-    if (!SPIFFS.exists(filename)) {
-      Serial.println("Send failed: No log file exists");
-      return;
+      File file = SPIFFS.open(filename, "r");
+      if (!file) {
+        Serial.println("Send failed: Failed to open file");
+        return;
+      }
+
+      size_t maxChunkSize = 512;
+      char buffer[maxChunkSize + 1];
+
+      while (file.available()) {
+        size_t bytesRead = file.readBytes(buffer, maxChunkSize);
+        buffer[bytesRead] = '\0';
+
+        pCharacteristic->setValue((uint8_t *)buffer, bytesRead);
+        pCharacteristic->notify();
+
+        delay(50);
+      }
+
+      file.close();
+      Serial.println("File sent successfully");
     }
-
-    File file = SPIFFS.open(filename,"r");
-    if (!file) {
-      Serial.println("Send failed: Failed to open file");
-      return;
-    }
-
-    // Read the file and send in chunks
-    size_t maxChunkSize = 512;
-    char buffer[maxChunkSize + 1];
-
-    while (file.available()) {
-      size_t bytesRead = file.readBytes(buffer, maxChunkSize);
-      buffer[bytesRead] = '\0'; // Null-terminate the string
-
-      // Send the chunks over bluetooth
-      pCharacteristic->setValue((uint8_t *)buffer,bytesRead);
-      pCharacteristic->notify();
-
-      delay(50); // Give delay for processing
-    }
-
-    file.close();
-    Serial.println("File sent successfully");
-  }
 };
 /*
 // Callbacks for connection and disconnection events
@@ -112,6 +108,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
   }
 };
 */
+MyCallbacks myCallbacks;
 
 // This is the setup, everything here is done only once - when the device is turned on
 void setup() {
@@ -124,11 +121,12 @@ void setup() {
   tft.setRotation(3);
   
   //Setup cursor and text on screen
-  tft.setCursor(10, 400);
+  tft.setCursor(10, 30);
   tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(12);
   tft.println("NODE");
-/*
+  delay(3000);
+
   // Initialize File system
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       Serial.println("SPIFFS Mount Failed");
@@ -138,29 +136,26 @@ void setup() {
   
   // Initialize BLE
   BLEDevice::init("NODE");
-  BLEServer* pServer = BLEDevice::createServer();
-  BLEService* pService = pServer->createService(BLEUUID((uint16_t)0xFFE0));
+  BLEServer *pServer = BLEDevice::createServer();
+  BLEService *pService = pServer->createService(BLEUUID((uint16_t)0xFFE0));
 
-  BLECharacteristic* pCharacteristic = pService->createCharacteristic(
-                                         BLEUUID((uint16_t)0xFFE1),
-                                         BLECharacteristic::PROPERTY_WRITE
-                                       );
+  pCharacteristic = pService->createCharacteristic(
+    BLEUUID((uint16_t)0xFFE1),
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
 
-  pCharacteristic->setCallbacks(new MyCallbacks());
+  pCharacteristic->setCallbacks(&myCallbacks());
   pCharacteristic->addDescriptor(new BLE2902());
 
   pService->start();
-  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->start();
   
   Serial.println("Waiting for client connection...");
   
   // Create a file for testing without bluetooth - Comment out if testing bluetooth
   //createTestFile();
-
-  // Read the File
   //readFile("/received.txt");
-  */
+  
 }
 
 // Save incoming data to a file
@@ -266,16 +261,21 @@ void printTime() {
 
 // Parse medication time and store as reminder time
 void parseMedicationTime(String timeString) {
-  int h, m;
+  int h_alarm, m_alarm, h, m;
   char period[3];
-  sscanf(timeString.c_str(), "%d:%d %s", &h, &m, period);
+  sscanf(timeString.c_str(), "%d:%d %s", &h_alarm, &m_alarm, period);
 
   // Adjust for AM/PM format if necessary
-  if (strcmp(period, "PM") == 0 && h < 12) h += 12;
+  if (strcmp(period, "PM") == 0 && h_alarm < 12) h += 12;
 
   // Set reminder time to today at the parsed hour and minute
-  reminderTime = now() + ((hour() - h)*60*60) + ((minute() - m) * 60);
+  if (h_alarm < hour()){ h = 24 - (hour() - h_alarm); } else { h = h_alarm - hour(); }
+  if (m_alarm < minute()){ m = 60 - (minute() - m_alarm); } else { m = m_alarm - minute(); }
+
+  reminderTime = now() + (h * 60 * 60) + (m * 60);
   Serial.print("Medication Reminder Set for: ");
+  Serial.print(hour());
+  Serial.print(h_alarm);
   Serial.print(h);
   Serial.print(":");
   Serial.println(m);
@@ -284,18 +284,22 @@ void parseMedicationTime(String timeString) {
 // This is the run stage, everything here keeps happening, forever.
 void loop() {
   
-  Serial.print("Now: ");
-  printTime();
-  Serial.println(reminderTime);
+  //printTime();
+  //Serial.println(reminderTime);
+  //Serial.println(now());
   // Update time and check if it's time for the reminder
-  if (now() >= reminderTime && now() < reminderTime + 60) {  // If it's the reminder time within a minute
-    tft.fillScreen(ILI9341_BLACK);
-    tft.setTextSize(5);
-    tft.println("Time to take your meds");
-    tft.println("Press the button below to dispense");
-    delay(60000); // Wait 60
+  if (reminderTime != 0) {
+    if (now() >= reminderTime && now() < reminderTime + 60) {  // If it's the reminder time within a minute
+      tft.fillScreen(ILI9341_BLACK);
+      tft.setCursor(10,10);
+      tft.setTextSize(2);
+      tft.println("Time to take your meds");
+      tft.println("Press the button below to dispense");
+      delay(60000); // Wait 60
 
-    
+      // Trigger bluetooth being sent out
+      myCallbacks.sendFile(pCharacteristic, "/log.txt");
+    }
   }
   delay(10000); // Wait 10 seconds before checking again
 }
