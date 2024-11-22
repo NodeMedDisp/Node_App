@@ -1,4 +1,4 @@
-// NODE Code Last Updated: 11/20/24
+// NODE Code Last Updated: 11/22/24
 #include <Arduino.h>
 #include <FS.h>
 #include <SPIFFS.h>  // Internal Library System
@@ -14,6 +14,8 @@
 
 String incomingData = "";        // Buffer for incoming data
 BLECharacteristic *pCharacteristic;
+bool deviceConnected = false;
+String prompt1;
 
 // Variables for storing parsed data from file
 time_t currentTime;       // Parsed current time from file
@@ -24,6 +26,9 @@ time_t reminderTime;      // Parsed medication reminder time
 #define TFT_RST    17
 #define TFT_DC     16
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+int screen_h = 240;
+int screen_w = 320;
+int connection_bar = 13;
 
 //Function declaration
 void saveToFile(String data, String file_name);
@@ -52,6 +57,8 @@ class MyCallbacks : public BLECharacteristicCallbacks {
         
         // Save the data to received file
         saveToFile(incomingData,"/received.txt");
+
+        createTestFile();
 
         // Read the file to parse the information
         readFile("/received.txt");
@@ -82,6 +89,7 @@ class MyCallbacks : public BLECharacteristicCallbacks {
         size_t bytesRead = file.readBytes(buffer, maxChunkSize);
         buffer[bytesRead] = '\0';
 
+
         pCharacteristic->setValue((uint8_t *)buffer, bytesRead);
         pCharacteristic->notify();
 
@@ -92,22 +100,31 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       Serial.println("File sent successfully");
     }
 };
-/*
+
 // Callbacks for connection and disconnection events
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
+    tft.fillRect(0,0,screen_w,connection_bar,ILI9341_DARKGREY);
+    tft.setCursor(10, 3);
+    tft.setTextSize(1);
+    tft.println("BLE: Connected");
     Serial.println("Device connected");
   }
 
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
     Serial.println("Device disconnected");
+    tft.fillRect(0,0,screen_w,connection_bar,ILI9341_DARKGREY);
+    tft.setCursor(10, 3);
+    tft.setTextSize(1);
+    tft.println("BLE: Disconnected");
     // Start advertising again after disconnect
     pServer->getAdvertising()->start();
   }
 };
-*/
+
+// Create a class object to be able to access the functions
 MyCallbacks myCallbacks;
 
 // This is the setup, everything here is done only once - when the device is turned on
@@ -121,7 +138,7 @@ void setup() {
   tft.setRotation(3);
   
   //Setup cursor and text on screen
-  tft.setCursor(10, 30);
+  tft.setCursor(25, 75);
   tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(12);
   tft.println("NODE");
@@ -136,14 +153,16 @@ void setup() {
   
   // Initialize BLE
   BLEDevice::init("NODE");
-  BLEServer *pServer = BLEDevice::createServer();
-  BLEService *pService = pServer->createService(BLEUUID((uint16_t)0xFFE0));
+  BLEServer *pServer = BLEDevice::createServer(); // Create BLE server
+  pServer->setCallbacks(new MyServerCallbacks()); // Attach the server callbacks
+
+  BLEService *pService = pServer->createService(BLEUUID((uint16_t)0xFFE0)); // Create BLE service with FFE0 ID
 
   pCharacteristic = pService->createCharacteristic(
     BLEUUID((uint16_t)0xFFE1),
-    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY); // Create pcharacteristic
 
-  pCharacteristic->setCallbacks(&myCallbacks());
+  pCharacteristic->setCallbacks(&myCallbacks); // Setup call backs for p characteristic
   pCharacteristic->addDescriptor(new BLE2902());
 
   pService->start();
@@ -182,7 +201,7 @@ void createTestFile(){
   // Write to file if it was created
   if (file) {
     file.println("Current Time: 2024-11-05 11:34:27"
-      "\nMedication: fcb\nDose: 1\nFrequency: Once daily\nTimes: 11:36 AM\nDays: 1 to 5"
+      "\nMedication: fcb\nDose: 1\nFrequency: Once daily\nTimes: 11:35 AM\nDays: 1 to 5"
       "\nPrompt1: What have you accomplished in the past 24 hours?\nRequired Response: No\nOptions: No options\nDays: 1 to 5");
     file.close();
     Serial.println("File written successfully.");
@@ -216,11 +235,9 @@ void readFile(String file_name){
       String timeString = line.substring(7);   // Extract medication time
       parseMedicationTime(timeString);         // Set reminder time
     } else if (line.startsWith("Prompt1: ")){
-      String prompt1 = line.substring(9);      // Extract Prompt 1
-      Serial.println(prompt1);                 // Print to Serial
+      prompt1 = line.substring(9);      // Extract Prompt 1
     } else if (line.startsWith("Prompt2: ")){
       String prompt2 = line.substring(9);      // Extract Prompt 2
-      Serial.println(prompt2);                 // Print to Serial
     }
   }
   file.close();
@@ -274,8 +291,6 @@ void parseMedicationTime(String timeString) {
 
   reminderTime = now() + (h * 60 * 60) + (m * 60);
   Serial.print("Medication Reminder Set for: ");
-  Serial.print(hour());
-  Serial.print(h_alarm);
   Serial.print(h);
   Serial.print(":");
   Serial.println(m);
@@ -283,22 +298,31 @@ void parseMedicationTime(String timeString) {
 
 // This is the run stage, everything here keeps happening, forever.
 void loop() {
-  
-  //printTime();
-  //Serial.println(reminderTime);
-  //Serial.println(now());
+
   // Update time and check if it's time for the reminder
-  if (reminderTime != 0) {
+  if (reminderTime != 0) { // Make sure there is a reminder time in the system
     if (now() >= reminderTime && now() < reminderTime + 60) {  // If it's the reminder time within a minute
-      tft.fillScreen(ILI9341_BLACK);
-      tft.setCursor(10,10);
+      tft.fillRect(0,connection_bar,screen_w,screen_h-connection_bar,ILI9341_BLACK);
+      tft.setCursor(10,30);
       tft.setTextSize(2);
       tft.println("Time to take your meds");
       tft.println("Press the button below to dispense");
-      delay(60000); // Wait 60
+
+      // Wait for button press
+      delay(3000);
+
+      // Display prompt after the medication is dispensed
+      tft.fillRect(0,connection_bar,screen_w,screen_h-connection_bar,ILI9341_BLACK);
+      tft.println("\n" + prompt1);
+
+      // Save data to log
+      saveToFile("Medication Taken: " + String(hour()) + ":" + String(minute()) + ":" + String(second()), "/log.txt");
 
       // Trigger bluetooth being sent out
       myCallbacks.sendFile(pCharacteristic, "/log.txt");
+      tft.println("\nConnecting to your phone");
+
+      delay(60000); // Wait 60 to prevent repeating the notification over and over again
     }
   }
   delay(10000); // Wait 10 seconds before checking again
