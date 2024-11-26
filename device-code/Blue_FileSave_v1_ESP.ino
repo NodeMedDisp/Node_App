@@ -9,6 +9,7 @@
 #include <TimeLib.h>                // Time library by Michael Margolis
 #include <Adafruit_GFX.h>           // For Screen
 #include <Adafruit_ILI9341.h>       // For Screen
+#include <vector>                     // For Prompts
 
 #define FORMAT_SPIFFS_IF_FAILED true
 
@@ -20,6 +21,7 @@ String prompt1;
 // Variables for storing parsed data from file
 time_t currentTime;       // Parsed current time from file
 time_t reminderTime;      // Parsed medication reminder time
+std::vector<String> prompts;  // Dynamic array to store all prompts
 
 // Screen Initialization
 #define TFT_CS     5
@@ -41,6 +43,7 @@ void parseMedicationTime(String timeString);
 //Bluetooth callback class
 class MyCallbacks : public BLECharacteristicCallbacks {
   // Handle receiving data
+  //3rd
   void onWrite(BLECharacteristic* pCharacteristic) {
     // Each value that is received
     String rxValue = pCharacteristic->getValue().c_str(); // Convert to String using c_str()
@@ -51,14 +54,14 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       incomingData += rxValue;
 
       // Check if incomingData ends with EOF to simulate end of file
-      if (incomingData.endsWith("EOF")) {
+      if (incomingData.indexOf("EOF") != -1) {
         Serial.println("Complete message received:");
         Serial.println(incomingData);
         
         // Save the data to received file
         saveToFile(incomingData,"/received.txt");
 
-        createTestFile();
+        //createTestFile();
 
         // Read the file to parse the information
         readFile("/received.txt");
@@ -85,9 +88,14 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       size_t maxChunkSize = 512;
       char buffer[maxChunkSize + 1];
 
+      Serial.println("Sending file contents:");
+
       while (file.available()) {
         size_t bytesRead = file.readBytes(buffer, maxChunkSize);
-        buffer[bytesRead] = '\0';
+        buffer[bytesRead] = '\0'; //Null-terminate the chunk
+
+        // Print the chunk to the Serial Monitor
+        Serial.println(buffer);
 
 
         pCharacteristic->setValue((uint8_t *)buffer, bytesRead);
@@ -103,6 +111,7 @@ class MyCallbacks : public BLECharacteristicCallbacks {
 
 // Callbacks for connection and disconnection events
 class MyServerCallbacks : public BLEServerCallbacks {
+  //2nd step
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
     tft.fillRect(0,0,screen_w,connection_bar,ILI9341_DARKGREY);
@@ -127,9 +136,10 @@ class MyServerCallbacks : public BLEServerCallbacks {
 // Create a class object to be able to access the functions
 MyCallbacks myCallbacks;
 
+//First
 // This is the setup, everything here is done only once - when the device is turned on
 void setup() {
-  Serial.begin(256000);
+  Serial.begin(115200);
   while (!Serial) delay(10); // Wait for serial to initialize
 
   // Initialize Screen
@@ -169,27 +179,36 @@ void setup() {
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->start();
   
-  Serial.println("Waiting for client connection...");
+  Serial.println("Waiting for client connection..."); //Once connected, go to onConnect
   
-  // Create a file for testing without bluetooth - Comment out if testing bluetooth
+  //Create a file for testing without bluetooth - Comment out if testing bluetooth
   //createTestFile();
   //readFile("/received.txt");
   
 }
 
+String getFormattedDateTime() {
+  char buffer[20];
+  snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d", year(), month(), day(), hour(), minute(), second());
+  return String(buffer);
+}
+
+//4th
 // Save incoming data to a file
 void saveToFile(String data, String file_name) {
   data.replace("EOF", "");  // Remove the EOF marker
 
   // Delete old file, if it exists
-  deleteFile(file_name);
+  //deleteFile(file_name);                 //!!! If the user does not connect to the device when they are dosing we do not want it to delete the file
 
   // Open file to write
   File file = SPIFFS.open(file_name, "w");
   if (file) {
+    String dateTime = getFormattedDateTime();
+     file.println("Date: " + dateTime); // Add date and time
     file.print(data);  // Write the received data
     file.close();
-    Serial.println("File written successfully.");
+    Serial.println("File written successfully with date and time.");
   } else {
     Serial.println("Failed to open file for writing.");
   }
@@ -210,6 +229,7 @@ void createTestFile(){
   }
 }
 
+//6th
 // Function to read the file
 void readFile(String file_name){
   // Load the file to read times
@@ -227,22 +247,22 @@ void readFile(String file_name){
   while (file.available()) {
     line = file.readStringUntil('\n');
 
-    // Look for the current time and medication time in the file and parse
+    // Look for the current time and medication time in the file and parse                         Eventually all of these should use vectors
     if (line.startsWith("Current Time: ")) {
       String timeString = line.substring(14);  // Extract time
       startClock(timeString);                  // Set internal clock to this time
     } else if (line.startsWith("Times: ")) {
       String timeString = line.substring(7);   // Extract medication time
       parseMedicationTime(timeString);         // Set reminder time
-    } else if (line.startsWith("Prompt1: ")){
-      prompt1 = line.substring(9);      // Extract Prompt 1
-    } else if (line.startsWith("Prompt2: ")){
-      String prompt2 = line.substring(9);      // Extract Prompt 2
+    } else if (line.startsWith("Prompt: ")){
+      // Dynamically extract and store any line starting with "Prompt"
+      prompts.push_back(line.substring(line.indexOf(":") + 2)); // Extract prompt text after "PromptX: "
     }
   }
   file.close();
 }
 
+//5th
 void deleteFile(String file_name){
   // Delete the existing file
   if (SPIFFS.exists(file_name)) {
@@ -257,6 +277,7 @@ void deleteFile(String file_name){
   }
 }
 
+//7th
 // Function to initialize the internal clock with the current time from file
 void startClock(String currentTimeString) {
   int year, month, day, hour, minute, second;
@@ -276,19 +297,36 @@ void printTime() {
   Serial.println(second());  // Print current second
 }
 
+//8th
 // Parse medication time and store as reminder time
 void parseMedicationTime(String timeString) {
   int h_alarm, m_alarm, h, m;
   char period[3];
   sscanf(timeString.c_str(), "%d:%d %s", &h_alarm, &m_alarm, period);
+  
 
   // Adjust for AM/PM format if necessary
   if (strcmp(period, "PM") == 0 && h_alarm < 12) h += 12;
+  Serial.print("Your alarm will go off at: ");
+  Serial.println(timeString);
 
-  // Set reminder time to today at the parsed hour and minute
-  if (h_alarm < hour()){ h = 24 - (hour() - h_alarm); } else { h = h_alarm - hour(); }
-  if (m_alarm < minute()){ m = 60 - (minute() - m_alarm); } else { m = m_alarm - minute(); }
+  // Set reminder time to today at the parsed hour and minute                                     //Update to work if it is the same hour
+    if (h_alarm < hour() || (h_alarm == hour() && m_alarm <= minute())) {
+    // If the reminder time is earlier than the current time, set it for the next day
+    h = 24 - (hour() - h_alarm); // Hours to the next day's alarm
+  } else {
+    h = h_alarm - hour(); // Hours difference for the same day
+  }
 
+  // Calculate minutes difference
+  if (m_alarm < minute()) {
+    m = 60 - (minute() - m_alarm);
+    h -= 1; // Adjust for crossing the hour boundary
+  } else {
+    m = m_alarm - minute();
+  }
+
+// Set the reminder time
   reminderTime = now() + (h * 60 * 60) + (m * 60);
   Serial.print("Medication Reminder Set for: ");
   Serial.print(h);
@@ -311,12 +349,19 @@ void loop() {
       // Wait for button press
       delay(3000);
 
-      // Display prompt after the medication is dispensed
-      tft.fillRect(0,connection_bar,screen_w,screen_h-connection_bar,ILI9341_BLACK);
-      tft.println("\n" + prompt1);
+      // Display prompts after the medication is dispensed
+      for (int i = 0; i < prompts.size(); i++) {
+        // Clear the screen before displaying each prompt
+        tft.fillRect(0, connection_bar, screen_w, screen_h - connection_bar, ILI9341_BLACK);
+        tft.setCursor(10, 30); // Adjust the position of the text as needed
+        tft.setTextSize(2);
+        tft.println("\n" + prompts[i]); // Display the current prompt
+        delay(3000); // Wait 3 seconds before showing the next prompt
+      }
 
       // Save data to log
-      saveToFile("Medication Taken: " + String(hour()) + ":" + String(minute()) + ":" + String(second()), "/log.txt");
+      String logEntry = "Medication Taken: " + String(hour()) + ":" + String(minute()) + ":" + String(second());
+      saveToFile(logEntry, "/log.txt");
 
       // Trigger bluetooth being sent out
       myCallbacks.sendFile(pCharacteristic, "/log.txt");
