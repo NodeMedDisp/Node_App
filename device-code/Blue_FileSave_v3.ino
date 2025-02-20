@@ -34,6 +34,12 @@ int screen_h = 240;
 int screen_w = 320;
 int connection_bar = 13;
 
+//Button Initialization
+#define BUTTON_ENTER 15
+#define BUTTON_NEXT 13
+#define BUTTON_BACK 2
+
+
 //Function declaration
 void saveToFile(String data, String file_name);
 void createTestFile();
@@ -158,6 +164,11 @@ void setup() {
   tft.println("NODE");
   delay(3000);
 
+  //Initialize Buttons
+  pinMode(BUTTON_ENTER, INPUT_PULLUP); // Set up the middle button as an input with pull-up
+  pinMode(BUTTON_NEXT, INPUT_PULLUP); // Set up the right button as an input with pull-up
+  pinMode(BUTTON_BACK, INPUT_PULLUP); // Set up the left button as an input with pull-up
+
   // Initialize File system
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       Serial.println("SPIFFS Mount Failed");
@@ -242,20 +253,42 @@ void saveData(String data, String file_name) {
   }
 }
 
-// Create a file for testing without bluetooth
-void createTestFile(){
-  File file = SPIFFS.open("/received.txt", "w");
-  // Write to file if it was created
-  if (file) {
-    file.println("Current Time: 2024-11-05 11:34:27"
-      "\nMedication: fcb\nDose: 1\nFrequency: Once daily\nTimes: 11:35 AM\nDays: 1 to 5"
-      "\nPrompt1: What have you accomplished in the past 24 hours?\nRequired Response: No\nOptions: No options\nDays: 1 to 5");
-    file.close();
-    Serial.println("File written successfully.");
-  } else {
-    Serial.println("Failed to create file for writing.");
-  }
+// Create a file for testing without Bluetooth
+void createTestFile() {
+    File file = SPIFFS.open("/received.txt", "w");
+
+    if (file) {
+        file.print(
+            "Current Time: 2025-02-11 16:51:35\n\n"
+            "Medication: Methadone\n"
+            "Dose: 100\n"
+            "Frequency: Once daily\n"
+            "Times: 4:52 PM\n"
+            "Days: 1 to 5\n\n"
+            
+            "Prompt: stress?\n"
+            "Required Response: Yes\n"
+            "Options: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10\n"
+            "Days: 1 to 5\n\n"
+            
+            "Prompt: opioids?\n"
+            "Required Response: Yes\n"
+            "Options: Yes, No\n"
+            "Days: 1 to 5\n\n"
+            
+            "Prompt: momma?\n"
+            "Required Response: Journal Response\n"
+            "Options: Respond in Journal\n"
+            "Days: 1 to 5\n"
+        );
+
+        file.close();
+        Serial.println("File written successfully.");
+    } else {
+        Serial.println("Failed to create file for writing.");
+    }
 }
+
 
 //6th
 // Function to read the file
@@ -382,6 +415,23 @@ void splitOptions(const String& optionString, std::vector<String>& optionList) {
     }
 }
 
+int waitForNavigation() {
+    while (true) {
+        if (digitalRead(BUTTON_NEXT) == LOW) {
+            delay(200);  // Debounce delay
+            return 1;  // Move forward
+        }
+        if (digitalRead(BUTTON_BACK) == LOW) {
+            delay(200);
+            return -1; // Move backward
+        }
+        if (digitalRead(BUTTON_ENTER) == LOW) {
+            delay(200);
+            return 0; // Confirm selection
+        }
+        delay(10);  // Small delay to avoid high CPU usage
+    }
+}
 
 void loop() {
     // Update time and check if it's time for the reminder
@@ -393,40 +443,57 @@ void loop() {
             tft.println("Time to take your meds");
             tft.println("Press the button below to dispense");
 
-            // Wait for button press
-            delay(3000);
+            // Wait for the user to press ENTER before proceeding
+            while (waitForNavigation() != 0);
 
             // Save prompts and dynamically selected responses to log
             String logEntry = ""; // Initialize variable
 
             for (int i = 0; i < prompts.size(); i++) {
-              // Clear the screen before displaying each prompt
-              tft.fillRect(0, connection_bar, screen_w, screen_h - connection_bar, ILI9341_BLACK);
-              tft.setCursor(10, 30); // Adjust the position of the text as needed
-              tft.setTextSize(2);
+                // Clear the screen before displaying each prompt
+                tft.fillRect(0, connection_bar, screen_w, screen_h - connection_bar, ILI9341_BLACK);
+                
+                // Center the prompt text
+                tft.setCursor(screen_w / 2 - (prompts[i].length() * 6), screen_h / 3);
+                tft.setTextSize(2);
+                tft.setTextColor(ILI9341_WHITE);
+                tft.println(prompts[i]);
 
-              // Display the current prompt
-              tft.println("\n" + prompts[i]);
-              tft.println("\n" + options[i]);
+                // Parse options and dynamically select one
+                std::vector<String> optionList;
+                if (i < options.size()) {
+                    splitOptions(options[i], optionList);
+                }
 
-              // Parse options and dynamically select one
-              std::vector<String> optionList;
-              if (i < options.size()) {
-                  splitOptions(options[i], optionList);
-              }
+                // Set up and start button commands
+                String selectedOption = optionList.empty() ? "No response" : optionList[0]; // Default to first option
+                int selectedIndex = 0;
 
-              // Select one option (random or first choice as an example)
-              String selectedOption = "No response";
-              if (!optionList.empty()) {
-                  selectedOption = optionList[random(0, optionList.size())]; // Randomly select an option
-              }
+                while (true) {
+                    // Clear screen area for options
+                    tft.fillRect(0, screen_h / 2, screen_w, screen_h / 3, ILI9341_BLACK);
+                    
+                    // Display the currently selected option, centered
+                    tft.setCursor(screen_w / 2 - (optionList[selectedIndex].length() * 6), screen_h / 2);
+                    tft.setTextSize(2);
+                    tft.setTextColor(ILI9341_YELLOW);
+                    tft.println("< " + optionList[selectedIndex] + " >");
 
-              delay(5000); // Wait 5 seconds before showing the next prompt
+                    int action = waitForNavigation();
 
-              // Append the prompt and selected option to the log entry
-              logEntry += "Prompt: " + prompts[i] + "  Response: " + selectedOption + '\n';
-          }
+                    if (action == 1) { // NEXT button pressed
+                        selectedIndex = (selectedIndex + 1) % optionList.size(); // Cycle forward
+                    } else if (action == -1) { // BACK button pressed
+                        selectedIndex = (selectedIndex - 1 + optionList.size()) % optionList.size(); // Cycle backward
+                    } else if (action == 0) { // ENTER button pressed
+                        selectedOption = optionList[selectedIndex];
+                        break; // Confirm selection and move on
+                    }
+                }
 
+                // Append the prompt and selected option to the log entry
+                logEntry += "Prompt: " + prompts[i] + "  Response: " + selectedOption + '\n';
+            }
 
             // Save the log to file
             Serial.print(logEntry); // Print all entries
@@ -451,7 +518,7 @@ void loop() {
     // Default screen between doses
     if (now() < reminderTime) {
         tft.fillScreen(ILI9341_BLACK);
-        tft.setCursor(25, 75);
+        tft.setCursor(25,75);
         tft.setTextColor(ILI9341_WHITE);
         tft.setTextSize(12);
         tft.println("NODE");
