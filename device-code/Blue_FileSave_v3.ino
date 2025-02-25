@@ -39,7 +39,7 @@ int connection_bar = 13;
 #define BUTTON_NEXT 13
 #define BUTTON_BACK 2
 
-//Buzzer Initialization
+//Buzzer Initialization - BUZZER is pin on board, other pin on buzzer goes to ground
 #define BUZZER 14
 int melody[] = {
   220, 262, 294, 349, 294, 349, 294, 262, 220,
