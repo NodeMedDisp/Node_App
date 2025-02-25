@@ -39,6 +39,16 @@ int connection_bar = 13;
 #define BUTTON_NEXT 13
 #define BUTTON_BACK 2
 
+//Buzzer Initialization
+#define BUZZER 14
+int melody[] = {
+  220, 262, 294, 349, 294, 349, 294, 262, 220,
+  294, 220, 349, 294, 220, 196,
+};
+int noteDurations[] = {
+  200, 200, 200, 400, 200, 400, 200, 200, 400,
+  200, 200, 400, 200, 200, 600
+};
 
 //Function declaration
 void saveToFile(String data, String file_name);
@@ -156,6 +166,12 @@ void setup() {
   tft.begin();
   tft.fillScreen(ILI9341_BLACK);
   tft.setRotation(1);
+
+  // Initialize Buzzer
+  pinMode(BUZZER, OUTPUT);
+  tone(BUZZER, 200); // Briefly beep when turning on 
+  delay(200);
+  noTone(BUZZER);
   
   //Setup cursor and text on screen
   tft.setCursor(25, 75);
@@ -437,6 +453,16 @@ void loop() {
     // Update time and check if it's time for the reminder
     if (reminderTime != 0) { // Make sure there is a reminder time in the system
         if (now() >= reminderTime && now() < reminderTime + 60) {  // If it's the reminder time within a minute
+            
+            // Play Song
+            for (int i = 0; i < sizeof(melody) / sizeof(melody[0]); i++) {
+              tone(BUZZER, melody[i]);  // Play note
+              delay(noteDurations[i]);     // Wait for the duration
+              noTone(BUZZER);           // Stop sound
+              delay(50);                   // Short pause between notes
+            }
+            
+            // Display on Screen
             tft.fillRect(0, connection_bar, screen_w, screen_h - connection_bar, ILI9341_BLACK);
             tft.setCursor(10, 30);
             tft.setTextSize(2);
