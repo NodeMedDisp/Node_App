@@ -2,8 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/node_app_2.iml" filepath="$PROJECT_DIR$/node_app_2.iml" />
-      <module fileurl="file://$PROJECT_DIR$/android/node_app_2_android.iml" filepath="$PROJECT_DIR$/android/node_app_2_android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/NODE-Medication-Dipensers.iml" filepath="$PROJECT_DIR$/.idea/modules/NODE-Medication-Dipensers.iml" />
     </modules>
   </component>
 </project>

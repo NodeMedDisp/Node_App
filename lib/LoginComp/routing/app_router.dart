@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:node_app_2/GetStarted/get_started.dart';
-import '/../HomePage/home_page.dart';
+import '../../Bluetooth/moc_ble_scanner_widget.dart';
+import '../../Bluetooth/mock_ble_scanner_screen.dart';
+import '/GetStarted/get_started.dart';
+import '/HomePage/home_page.dart';
 
 import '../logic/cubit/auth_cubit.dart';
 import '../screens/create_password/ui/create_password.dart';
 import '../screens/forget/ui/forget_screen.dart';
-import '../screens/home/ui/home_sceren.dart';
 import '../screens/login/ui/login_screen.dart';
 import '../screens/signup/ui/sign_up_sceen.dart';
 import 'routes.dart';
@@ -17,6 +18,9 @@ class AppRouter {
   AppRouter() {
     authCubit = AuthCubit();
   }
+
+  List<Map<String,String>> prompts = [];
+  List<Map<String,String>> medications = [];
 
   Route? generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -32,8 +36,21 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => BlocProvider.value(
             value: authCubit,
-            child: const GetStartedPage(),
+            child: HomePage(
+              prompts: prompts,
+              medications: medications,
+
+            ),
           ),
+        );
+
+      case Routes.mockBLEScanner:
+        return MaterialPageRoute(
+          builder: (_) => const MockBLEScannerScreen(),
+        );
+
+      case Routes.mockBLEScanner:
+        return MaterialPageRoute(builder: (_) => const MockBLEScannerWidget()
         );
 
       case Routes.createPassword:

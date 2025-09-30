@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
-import 'pt_questions_screen.dart';
+import 'counseling_questions_screen.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // Import FlutterBluePlus
 
 class EnterPrescriptionData extends StatefulWidget {
+  final BluetoothDevice? device;
+
+  const EnterPrescriptionData({super.key, this.device});
+
   @override
   _EnterPrescriptionDataState createState() => _EnterPrescriptionDataState();
 }
@@ -22,20 +25,6 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
   int _numTimesPerDay = 0; // Number of times to take medication per day
   List<TimeOfDay?> _selectedTimes = []; // List of selected times
 
-  // Save the medications to a file
-  Future<void> _saveDataToFile() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/user_responses.txt');
-    for (var medication in medications) {
-      await file.writeAsString(
-        'Medication: ${medication["medication"]}, Dose: ${medication["dose"]}, Frequency: ${medication["frequency"]}, '
-        'Times: ${medication["times"]}, '
-        'Days: ${medication["startDay"]} to ${medication["endDay"]}\n',
-        mode: FileMode.append,
-      );
-    }
-  }
-
   void _addMedication() {
     // Ensure that all fields are filled out
     if (_medicationController.text.isNotEmpty &&
@@ -43,6 +32,13 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
         _frequency != null &&
         _startDayController.text.isNotEmpty &&
         _endDayController.text.isNotEmpty) {
+
+// Convert the selected times from TimeOfDay to a formatted string
+      _times = _selectedTimes
+          .where((time) => time != null)
+          .map((time) => time!.format(context))  // Format the TimeOfDay as a readable string
+          .toList();
+
       setState(() {
         // Add the medication to the list
         medications.add({
@@ -58,7 +54,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
         _medicationController.clear();
         _doseController.clear();
         _frequency = null; // Reset dropdown value
-        _times.clear(); // Clear the times
+        _selectedTimes = List.filled(_numTimesPerDay, null); // Clear the times
         _startDayController.clear();
         _endDayController.clear();
       });
@@ -84,7 +80,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Enter Prescription Data")),
+      appBar: AppBar(title: const Text("Enter Prescription Data")),
       resizeToAvoidBottomInset: true,
       // Resizes content when the keyboard appears
       body: SafeArea(
@@ -99,19 +95,19 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 decoration: InputDecoration(
                   labelText: "Medication Name",
                   labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(
+                  border: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: Colors.black,
                       width: 1.5,
                     ),
                   ),
-                  enabledBorder: OutlineInputBorder(
+                  enabledBorder: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: Colors.black,
                       width: 1.5,
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
+                  focusedBorder: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: ColorsManager.mainBlue,
                       width: 2.0,
@@ -126,21 +122,21 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 controller: _doseController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: "Number of Pills Per Dose",
+                  labelText: "Number of Units Per Dose",
                   labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(
+                  border: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: Colors.black,
                       width: 1.5,
                     ),
                   ),
-                  enabledBorder: OutlineInputBorder(
+                  enabledBorder: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: Colors.black,
                       width: 1.5,
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
+                  focusedBorder: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: ColorsManager.mainBlue,
                       width: 2.0,
@@ -153,7 +149,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
               // Frequency Dropdown
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(
-                  labelText: "How often do you take the medication?",
+                  labelText: "How often will the medication be taken?",
                   labelStyle: TextStyle(
                     color: Colors.grey[600],
                     fontWeight: FontWeight.w400,
@@ -163,13 +159,13 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                       color: Colors.grey[400]!,
                     ),
                   ),
-                  enabledBorder: OutlineInputBorder(
+                  enabledBorder: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: Colors.black,
                       width: 1.5,
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
+                  focusedBorder: const OutlineInputBorder(
                     borderSide: BorderSide(
                       color: ColorsManager.mainBlue,
                       width: 2.0,
@@ -221,15 +217,15 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                         Expanded(
                           child: ElevatedButton(
                               onPressed: () => _pickTime(index),
+                              style: ElevatedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: 10.h),
+                              ),
                               child: Text(
                                 _selectedTimes[index] == null
                                     ? 'Select Time'
                                     : 'Time: ${_selectedTimes[index]!.format(context)}',
                                 style: TextStyles.font14Hint500Weight
                                     .copyWith(color: ColorsManager.mainBlue),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(vertical: 10.h),
                               )),
                         ),
                       ],
@@ -254,13 +250,13 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                             color: Colors.grey[400]!,
                           ),
                         ),
-                        enabledBorder: OutlineInputBorder(
+                        enabledBorder: const OutlineInputBorder(
                           borderSide: BorderSide(
                             color: Colors.black,
                             width: 1.5,
                           ),
                         ),
-                        focusedBorder: OutlineInputBorder(
+                        focusedBorder: const OutlineInputBorder(
                           borderSide: BorderSide(
                             color: ColorsManager.mainBlue,
                             width: 2.0,
@@ -282,13 +278,13 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                             color: Colors.grey[400]!,
                           ),
                         ),
-                        enabledBorder: OutlineInputBorder(
+                        enabledBorder: const OutlineInputBorder(
                           borderSide: BorderSide(
                             color: Colors.black,
                             width: 1.5,
                           ),
                         ),
-                        focusedBorder: OutlineInputBorder(
+                        focusedBorder: const OutlineInputBorder(
                           borderSide: BorderSide(
                             color: ColorsManager.mainBlue,
                             width: 2.0,
@@ -306,21 +302,21 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _addMedication,
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 15.h),
+                    backgroundColor: ColorsManager.mainBlue,
+                  ),
                   child: Text(
                     "Add Medication",
                     style: TextStyles.font14Hint500Weight
                         .copyWith(color: Colors.white),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 15.h),
-                    backgroundColor: ColorsManager.mainBlue,
                   ),
                 ),
               ),
               SizedBox(height: 20.h),
 
               // Display Added Medications
-              Container(
+              SizedBox(
                 height: 200.h, // Set a fixed height for the list
                 child: ListView.builder(
                   itemCount: medications.length,
@@ -331,6 +327,15 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                         "${medication['medication']} - ${medication['frequency']} ",
                         style: TextStyle(fontSize: 16.sp),
                       ),
+                        // Add a trailing delete button
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, color: Colors.grey),
+                          onPressed: () {
+                            setState(() {
+                              medications.removeAt(index); // Remove the prompt at the current index
+                            });
+                          },
+                        )
                     );
                   },
                 ),
@@ -341,27 +346,28 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
       ),
 
       bottomNavigationBar: Padding(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
             onPressed: () async {
-              await _saveDataToFile();
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => PhysicalTherapyQuestionScreen(medications: medications),
+                  builder: (context) => CounselingQuestionScreen(
+                      medications: medications,
+                      device: widget.device),
                 ),
               );
             },
+            style: ElevatedButton.styleFrom(
+              padding: EdgeInsets.symmetric(vertical: 15.h),
+              backgroundColor: Colors.white,
+            ),
             child: Text(
               "Continue",
               style:
                   TextStyles.font14Hint500Weight.copyWith(color: ColorsManager.mainBlue),
-            ),
-            style: ElevatedButton.styleFrom(
-              padding: EdgeInsets.symmetric(vertical: 15.h),
-              backgroundColor: Colors.white,
             ),
           ),
         ),

@@ -1,236 +1,195 @@
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'dart:io';
+import 'dart:async';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '/../HomePage/home_page.dart';
+import '/../HomePage/calendar_widg.dart';  // Import the new CalendarWidget file
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-import '/../HomePage/home_page.dart';
+import 'package:intl/intl.dart'; // For date and time formatting
 
-
-class PhysicalTherapySummaryScreen extends StatefulWidget {
-  final List<Map<String, String>> activities;
-  final Future<void> Function() saveDataToFile;
+class RecoverySummaryScreen extends StatefulWidget {
+  final List<Map<String, dynamic>> prompts;
   final List<Map<String, String>> medications;
+  final BluetoothDevice? device;
 
-  PhysicalTherapySummaryScreen({
-    required this.activities,
-    required this.saveDataToFile,
+  const RecoverySummaryScreen({
+    super.key,
+    required this.prompts,
     required this.medications,
+    this.device,
   });
 
   @override
-  _PhysicalTherapySummaryScreenState createState() =>
-      _PhysicalTherapySummaryScreenState();
+  _RecoverySummaryScreenState createState() => _RecoverySummaryScreenState();
 }
 
-class _PhysicalTherapySummaryScreenState
-    extends State<PhysicalTherapySummaryScreen> {
-  DateTime _focusedDay = DateTime(2023, 10, 12); // Assuming surgery date
-  DateTime _selectedDay = DateTime(2023, 10, 12);
+class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
+  DateTime StartDate = DateTime.now(); // Default surgery date
 
-  // Get activities for the specific day
-  List<Map<String, String>> _getActivitiesForDay(DateTime day) {
-    return widget.activities.where((activity) {
-      final startDay = int.parse(activity['startDay']!);
-      final endDay = int.parse(activity['endDay']!);
-      final activityDay = DateTime(2023, 10, 12).add(Duration(days: startDay - 1));
-      final lastActivityDay = DateTime(2023, 10, 12).add(Duration(days: endDay - 1));
-      return day.isAfter(activityDay.subtract(Duration(days: 1))) &&
-          day.isBefore(lastActivityDay.add(Duration(days: 1)));
-    }).toList();
+  // Save the prompts and medications to a file
+  Future<void> _saveDataToFile() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/user_responses.txt');
+
+      // Function to get current time in a specific format
+      String getCurrentTime() {
+        final now = DateTime.now();
+        return DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+      }
+
+      // Add current time to the file
+      final currentTime = getCurrentTime();
+      await file.writeAsString('Current Time: $currentTime\n', mode: FileMode.write);
+
+      // Save medications
+      for (var medication in widget.medications) {
+        await file.writeAsString(
+          '\nMedication: ${medication["medication"]}\nDose: ${medication["dose"]}\nFrequency: ${medication["frequency"]}\n'
+              'Times: ${medication["times"]}\n'
+              'Days: ${medication["startDay"]} to ${medication["endDay"]}\n',
+          mode: FileMode.append,
+        );
+      }
+
+      // Save prompts with
+      for (var prompt in widget.prompts) {
+        final options = prompt.containsKey('options') && prompt['options'] != null
+            ? (prompt['options'] as List<String>).join(', ')
+            : 'No options';
+
+        await file.writeAsString(
+          '\nPrompt: ${prompt["prompt"]}\n'
+              'Required Response: ${prompt["resReq"]}\n'
+              'Options: $options\n'
+              'Days: ${prompt["startDay"]} to ${prompt["endDay"]}\n',
+          mode: FileMode.append,
+        );
+      }
+
+      // End of file marker
+      await file.writeAsString('EOF\n', mode: FileMode.append);
+      print('Data saved to file successfully!');
+    } catch (e) {
+      print('Error saving data to file: $e');
+    }
   }
 
-  // Get medications for the specific day
-  List<Map<String, String>> _getMedicationsForDay(DateTime day) {
-    return widget.medications.where((medication) {
-      final startDay = int.parse(medication['startDay']!);
-      final endDay = int.parse(medication['endDay']!);
-      final dose = int.parse(medication['dose']!);
-      final medicationStartDay = DateTime(2023, 10, 12).add(Duration(days: startDay - 1));
-      final lastMedicationDay = DateTime(2023, 10, 12).add(Duration(days: endDay - 1));
-      return day.isAfter(medicationStartDay.subtract(Duration(days: 1))) &&
-          day.isBefore(lastMedicationDay.add(Duration(days: 1)));
-    }).toList();
+  // Locate the file in local storage
+  Future<String?> locateFile() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();  // Use path_provider to get the file directory
+      final filePath = '${directory.path}/user_responses.txt';
+      return filePath;
+    } catch (e) {
+      print('Error locating file: $e');
+      return null;
+    }
+  }
+
+  // Read the file's contents
+  Future<String> readFile(String path) async {
+    try {
+      final file = File(path);
+      return await file.readAsString();  // Read file content as a string
+    } catch (e) {
+      print('Error reading file: $e');
+      return '';
+    }
+  }
+
+  // Function to send the file content to the connected BLE device
+  Future<void> sendFileToDevice(BluetoothDevice device) async {
+    try {
+      final filePath = await locateFile();
+      if (filePath == null) {
+        print("File not found.");
+        return;
+      }
+
+      String fileContent = await readFile(filePath);
+      if (fileContent.isEmpty) {
+        print("File is empty.");
+        return;
+      }
+
+      List<BluetoothService> services = await device.discoverServices();
+      for (var service in services) {
+        for (var characteristic in service.characteristics) {
+          if (characteristic.properties.write) {
+            List<int> bytes = fileContent.codeUnits;
+            int chunkSize = 20;  // BLE payload size is typically 20 bytes
+
+            for (int i = 0; i < bytes.length; i += chunkSize) {
+              List<int> chunk = bytes.sublist(i, (i + chunkSize > bytes.length) ? bytes.length : i + chunkSize);
+              await characteristic.write(chunk, withoutResponse: false);
+            }
+            print('File sent successfully!');
+          }
+        }
+      }
+    } catch (e) {
+      print('Error sending file: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final activitiesForDay = _getActivitiesForDay(_selectedDay);
-    final medicationsForDay = _getMedicationsForDay(_selectedDay);
-
     return Scaffold(
-      appBar: AppBar(title: Text("Physical Therapy Summary")),
+      appBar: AppBar(title: const Text("Recovery Summary")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Calendar to show activities and medications by day
-            TableCalendar(
-              firstDay: DateTime(2023, 10, 12), // Surgery date
-              lastDay: DateTime(2023, 12, 31), // Adjust the range as needed
-              focusedDay: _focusedDay,
-              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-              onDaySelected: (selectedDay, focusedDay) {
-                setState(() {
-                  _selectedDay = selectedDay;
-                  _focusedDay = focusedDay;
-                });
-              },
+            Expanded(
+              // Use the new CalendarWidget here to display the calendar with prompts and medications
+              child: CalendarWidget(
+                prompts: widget.prompts,
+                medications: widget.medications,
+                StartDate: StartDate,  // Pass surgery date here
+              ),
             ),
-            SizedBox(height: 20),
-
-            // Show Activities Header
-            if (activitiesForDay.isNotEmpty) ...[
-              Text("Activities", style: TextStyles.font14Blue400Weight),
-              Expanded(
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3, // Three activities per row
-                    crossAxisSpacing: 10.0,
-                    mainAxisSpacing: 10.0,
-                    childAspectRatio: 2.5,
-                  ),
-                  itemCount: activitiesForDay.length,
-                  itemBuilder: (context, index) {
-                    final activity = activitiesForDay[index];
-                    return GestureDetector(
-                      onTap: () => _showActivityDetails(context, activity),
-                      child: Container(
-                        padding: EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: ColorsManager.mainBlue.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        child: Center(
-                          child: Text(
-                            activity['activity']!,
-                            style: TextStyle(fontSize: 14.sp),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-
-            // Show Medications Header
-            if (medicationsForDay.isNotEmpty) ...[
-              Text("Medications", style: TextStyles.font14Blue400Weight),
-              Expanded(
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3, // Three medications per row
-                    crossAxisSpacing: 10.0,
-                    mainAxisSpacing: 10.0,
-                    childAspectRatio: 2.5,
-                  ),
-                  itemCount: medicationsForDay.length,
-                  itemBuilder: (context, index) {
-                    final medication = medicationsForDay[index];
-                    return GestureDetector(
-                      onTap: () => _showMedicationDetails(context, medication),
-                      child: Container(
-                        padding: EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: ColorsManager.mainBlue.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        child: Center(
-                          child: Text(
-                            medication['medication']!,
-                            style: TextStyle(fontSize: 14.sp),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
           ],
         ),
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SizedBox(
-          width: double.infinity, // Full width for the button
+          width: double.infinity,
           child: ElevatedButton(
             onPressed: () async {
-              await widget.saveDataToFile();
+              await _saveDataToFile();   // Save the data
+              if (widget.device != null) {
+                await sendFileToDevice(widget.device!); // Send to real BLE device
+              } else {
+                print("Mock mode: skipping BLE transmission");
+              }
+
               Navigator.push(
                 context,
-                  MaterialPageRoute(
-                  builder: (context) => HomePage()
-                  )
+                MaterialPageRoute(
+                  builder: (context) => HomePage(
+                    prompts: widget.prompts,
+                    medications: widget.medications,
+                  ),
+                ),
               );
             },
-            child: Text(
-              "Save and Continue",
-              style: TextStyles.font14Hint500Weight.copyWith(color: ColorsManager.mainBlue),
-            ),
             style: ElevatedButton.styleFrom(
-              padding: EdgeInsets.symmetric(vertical: 15),
-              backgroundColor: Colors.white, // Customize as needed
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              backgroundColor: Colors.white,  // Customize as needed
+            ),
+            child: const Text(
+              "Send to Device and Continue",
+              style: TextStyle(color: ColorsManager.mainBlue),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  // Show activity details in a dialog
-  void _showActivityDetails(BuildContext context, Map<String, String> activity) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(activity['activity']!),
-          content: Text(
-            "Metric: ${activity['metric']}\n"
-                "Value: ${activity['value']}\n"
-                "Times per day: ${activity['timesPerDay']}\n"
-                "Days: ${activity['startDay']} to ${activity['endDay']}",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text("Close"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Show medication details in a dialog
-  void _showMedicationDetails(BuildContext context, Map<String, String> medication) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(medication['medication']!),
-          content: Text(
-            "Frequency: ${medication['frequency']}\n"
-                "Dose: ${medication['dose']}\n"
-                "Times: ${medication['times']}\n"
-                "Days: ${medication['startDay']} to ${medication['endDay']}",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text("Close"),
-            ),
-          ],
-        );
-      },
     );
   }
 }

@@ -1,14 +1,19 @@
+
 import 'package:gap/gap.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:node_app_2/GetStarted/enter_prescription_data.dart';
-import 'dart:io';  // Required for working with files
-import 'package:path_provider/path_provider.dart';  // For accessing device storage
+import '/GetStarted/enter_prescription_data.dart';
+
 import 'package:flutter/material.dart';
-import 'enter_prescription_data.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
 
 class PrescriptionQuestionScreen extends StatefulWidget {
+  final String selectedSurgery;
+
+  const PrescriptionQuestionScreen({super.key, required this.selectedSurgery});
+
+  get device => null;
+
   @override
   _PrescriptionQuestionScreenState createState() => _PrescriptionQuestionScreenState();
 }
@@ -21,7 +26,7 @@ class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen>
     List<String> prescriptionOptions = ['Yes', 'No'];
 
     return Scaffold(
-      appBar: AppBar(title: Text('Prescription Question')),
+      appBar: AppBar(title: const Text('Prescription Question')),
       body: Center(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 20.w),
@@ -64,17 +69,17 @@ class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => EnterPrescriptionData(),
+                        builder: (context) => EnterPrescriptionData(device: widget.device), 
                       ),
                     );
                   },
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(double.infinity, 50.h),
+                  ),
                   child: Text(
                       'Continue',
                     style:
                     TextStyles.font14Hint500Weight.copyWith(color: ColorsManager.mainBlue),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50.h),
                   ),
                 ),
             ],

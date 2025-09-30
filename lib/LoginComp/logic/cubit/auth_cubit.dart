@@ -62,34 +62,54 @@ class AuthCubit extends Cubit<AuthState> {
 
   Future<void> signInWithGoogle() async {
     emit(AuthLoading());
-    try {
-      await GoogleSignIn().signOut();
 
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+    final GoogleSignIn googleSignIn = GoogleSignIn(
+      scopes: ['email', 'profile'],
+    );
+
+    try {
+      // Sign out any existing session to ensure a clean start
+      await googleSignIn.signOut();
+
+      // Start the Google Sign-In flow
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        emit(AuthError('Google Sign In Failed'));
+        emit(AuthError('Google Sign-In was cancelled or failed.'));
         return;
       }
-      // Obtain the auth details from the request
+
+      // Retrieve the ID token (accessToken is deprecated in newer versions)
       final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-      // Create a new credential
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
+      await googleUser.authentication;
+
+      if (googleAuth.idToken == null) {
+        emit(AuthError('Failed to retrieve ID token from Google.'));
+        return;
+      }
+
+      // Create Firebase credential using the ID token
+      final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
-      final UserCredential authResult =
-          await _auth.signInWithCredential(credential);
-      if (authResult.additionalUserInfo!.isNewUser) {
-        // Delete the user account if it is a new user to Create it automatically in Next Screen
-        await _auth.currentUser!.delete();
 
-        emit(IsNewUser(googleUser: googleUser, credential: credential));
+      // Sign in to Firebase with the credential
+      final UserCredential authResult =
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // Check if the user is new
+      if (authResult.additionalUserInfo?.isNewUser ?? false) {
+        // Delete the auto-created Firebase user to handle onboarding manually
+        await FirebaseAuth.instance.currentUser?.delete();
+
+        emit(IsNewUser(
+          googleUser: googleUser,
+          credential: credential,
+        ));
       } else {
         emit(UserSignIn());
       }
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError('Google Sign-In failed: ${e.toString()}'));
     }
   }
 
