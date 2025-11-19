@@ -17,8 +17,7 @@ class EnterCounselingPrompts extends StatefulWidget {
 
 class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
   final TextEditingController _promptController = TextEditingController();
-  final TextEditingController _startDayController = TextEditingController();
-  final TextEditingController _endDayController = TextEditingController();
+  final TextEditingController _daysController = TextEditingController();
 
   String _responseRequired = 'Require a Response?'; // Default dropdown value
   String? _responseType; // Holds the selected response type ("Yes/No" or "1-10 Scale")
@@ -54,14 +53,12 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
         "resReq": _responseRequired,
         "responseType": _responseRequired == 'Yes' ? _responseType : null,
         "options": options,
-        "startDay": _startDayController.text,
-        "endDay": _endDayController.text,
+        "numberOfDays": _daysController.text,
       });
 
       // Clear all fields after adding the prompt
       _promptController.clear();
-      _startDayController.clear();
-      _endDayController.clear();
+      _daysController.clear();
       _responseRequired = 'Require a Response?';
       _responseType = null;
       _errorMessage = null; // Clear any error messages
@@ -190,65 +187,31 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
 
               SizedBox(height: 10.h),
 
-              // Timeframe Input (Day X to Day Y from surgery)
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _startDayController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: "Start Day (ie. enter 1 for 'Day 1')",
-                        labelStyle: TextStyles.font14Hint500Weight,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.grey[400]!,
-                          ),
-                        ),
-                        enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.black,
-                            width: 1.5,
-                          ),
-                        ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: ColorsManager.mainBlue,
-                            width: 2.0,
-                          ),
-                        ),
-                      ),
+              // Timeframe
+              TextField(
+                controller: _daysController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: "Number of Days",
+                  labelStyle: TextStyles.font14Hint500Weight,
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.grey[400]!,
                     ),
                   ),
-                  SizedBox(width: 10.w),
-                  Expanded(
-                    child: TextField(
-                      controller: _endDayController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: "End Day (ie. enter 1 for 'Day 1')",
-                        labelStyle: TextStyles.font14Hint500Weight,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.grey[400]!,
-                          ),
-                        ),
-                        enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.black,
-                            width: 1.5,
-                          ),
-                        ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: ColorsManager.mainBlue,
-                            width: 2.0,
-                          ),
-                        ),
-                      ),
+                  enabledBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.black,
+                      width: 1.5,
                     ),
                   ),
-                ],
+                  focusedBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: ColorsManager.mainBlue,
+                      width: 2.0,
+                    ),
+                  ),
+                ),
               ),
               SizedBox(height: 20.h),
 
@@ -278,7 +241,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     final prompt = prompts[index];
                     return ListTile(
                       title: Text(
-                        "${prompt['prompt']} (${prompt['startDay']} to ${prompt['endDay']} days)",
+                        "${prompt['prompt']} (${prompt['numberOfDays']} day(s))",
                         style: TextStyle(fontSize: 16.sp),
                       ),
                       subtitle: Text(

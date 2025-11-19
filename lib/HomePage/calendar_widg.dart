@@ -93,12 +93,18 @@ class _CalendarWidgetState extends State<CalendarWidget> {
 
     // Calculate prompts from widget data
     final widgetPrompts = widget.prompts.where((prompt) {
-      final startDay = int.parse(prompt['startDay']!);
-      final endDay = int.parse(prompt['endDay']!);
-      final activityDay = widget.StartDate.add(Duration(days: startDay - 1));
-      final lastActivityDay = widget.StartDate.add(Duration(days: endDay - 1));
-      return day.isAfter(activityDay.subtract(const Duration(days: 1))) &&
-          day.isBefore(lastActivityDay.add(const Duration(days: 1)));
+      final numberOfDaysStr = prompt['numberOfDays'];
+      if (numberOfDaysStr == null) return false;
+
+      final numberOfDays = int.tryParse(numberOfDaysStr);
+      if (numberOfDays == null) return false;
+
+      final activityStart = widget.StartDate;
+      final activityEnd = activityStart.add(Duration(days: numberOfDays - 1));
+
+      final normalizedDay = DateTime(day.year, day.month, day.day);
+      return normalizedDay.isAfter(activityStart.subtract(const Duration(days: 1))) &&
+          normalizedDay.isBefore(activityEnd.add(const Duration(days: 1)));
     }).toList();
 
     // Merge prompts while avoiding duplicates
@@ -133,11 +139,12 @@ class _CalendarWidgetState extends State<CalendarWidget> {
 
     // Parse widget medications
     final widgetMedications = widget.medications.where((medication) {
-      final startDay = int.parse(medication['startDay']!);
-      final endDay = int.parse(medication['endDay']!);
-      final medicationStartDay = widget.StartDate.add(Duration(days: startDay - 1));
-      final lastMedicationDay = widget.StartDate.add(Duration(days: endDay - 1));
-      return day.isAfter(medicationStartDay.subtract(const Duration(days: 1))) &&
+      final numDays = int.parse(medication['numDays']!);
+      final medicationStartDay = widget.StartDate.add(Duration(days: -1));
+      final lastMedicationDay =
+      widget.StartDate.add(Duration(days: numDays - 1));
+      return day
+          .isAfter(medicationStartDay.subtract(const Duration(days: 1))) &&
           day.isBefore(lastMedicationDay.add(const Duration(days: 1)));
     }).toList();
 
@@ -591,7 +598,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
           content: Text(
             "Required Response: ${prompt['resReq']}\n"
             "Response Options: $options\n"
-            "Days: ${prompt['startDay']} to ${prompt['endDay']}",
+            "Duration: ${prompt['numberOfDays']} day(s)",
           ),
           actions: [
             TextButton(
@@ -618,7 +625,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             "Frequency: ${medication['frequency']}\n"
             "Dose: ${medication['dose']}\n"
             "Times: ${medication['times']}\n"
-            "Days: ${medication['startDay']} to ${medication['endDay']}",
+            "Duration: ${medication['numberOfDays']} day(s)",
           ),
           actions: [
             TextButton(

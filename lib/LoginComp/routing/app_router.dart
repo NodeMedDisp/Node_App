@@ -44,14 +44,16 @@ class AppRouter {
           ),
         );
 
-      case Routes.mockBLEScanner:
+      case Routes.mockBLEScannerScreen:
         return MaterialPageRoute(
           builder: (_) => const MockBLEScannerScreen(),
         );
 
-      case Routes.mockBLEScanner:
-        return MaterialPageRoute(builder: (_) => const MockBLEScannerWidget()
+      case Routes.mockBLEScannerWidget:
+        return MaterialPageRoute(
+          builder: (_) => const MockBLEScannerWidget(),
         );
+
 
       case Routes.createPassword:
         final arguments = settings.arguments;
