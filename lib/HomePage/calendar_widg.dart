@@ -625,7 +625,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             "Frequency: ${medication['frequency']}\n"
             "Dose: ${medication['dose']}\n"
             "Times: ${medication['times']}\n"
-            "Duration: ${medication['numberOfDays']} day(s)",
+            "Duration: ${medication['numDays']} day(s)",
           ),
           actions: [
             TextButton(
