@@ -1,5 +1,6 @@
 class Routes {
-  static const String mockBLEScanner = '/mockScanner';
+  static const String mockBLEScannerScreen = '/mockBLEScannerScreen';
+  static const String mockBLEScannerWidget = '/mockBLEScannerWidget';
   static const String loginScreen = "/loginScreen";
   static const String forgetScreen = "/forgetScreen";
   static const String signupScreen = "/signupScreen";

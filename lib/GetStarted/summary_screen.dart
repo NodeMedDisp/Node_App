@@ -35,6 +35,8 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/user_responses.txt');
+      print('File saved at: ${file.path}');
+
 
       // Function to get current time in a specific format
       String getCurrentTime() {
@@ -69,6 +71,7 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
               'Days: ${prompt["startDay"]} to ${prompt["endDay"]}\n',
           mode: FileMode.append,
         );
+        showFileContents();
       }
 
       // End of file marker
@@ -78,6 +81,20 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
       print('Error saving data to file: $e');
     }
   }
+
+  // Show file contents
+  Future<void> showFileContents() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/user_responses.txt');
+
+    if (await file.exists()) {
+      final contents = await file.readAsString();
+      print('File contents:\n$contents');
+    } else {
+      print('File not found.');
+    }
+  }
+
 
   // Locate the file in local storage
   Future<String?> locateFile() async {

@@ -17,8 +17,7 @@ class EnterPrescriptionData extends StatefulWidget {
 class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
   final TextEditingController _medicationController = TextEditingController();
   final TextEditingController _doseController = TextEditingController();
-  final TextEditingController _startDayController = TextEditingController();
-  final TextEditingController _endDayController = TextEditingController();
+  final TextEditingController _daysController = TextEditingController();
   String? _frequency;
   List<String> _times = [];
   List<Map<String, String>> medications = [];
@@ -30,8 +29,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     if (_medicationController.text.isNotEmpty &&
         _doseController.text.isNotEmpty &&
         _frequency != null &&
-        _startDayController.text.isNotEmpty &&
-        _endDayController.text.isNotEmpty) {
+        _daysController.text.isNotEmpty) {
 
 // Convert the selected times from TimeOfDay to a formatted string
       _times = _selectedTimes
@@ -46,8 +44,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
           "frequency": _frequency!,
           "dose": _doseController.text,
           "times": _times.join(', '),
-          "startDay": _startDayController.text,
-          "endDay": _endDayController.text,
+          "numDays": _daysController.text,
         });
 
         // Clear the input fields
@@ -55,8 +52,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
         _doseController.clear();
         _frequency = null; // Reset dropdown value
         _selectedTimes = List.filled(_numTimesPerDay, null); // Clear the times
-        _startDayController.clear();
-        _endDayController.clear();
+        _daysController.clear();
       });
     } else {
       // Optional: Display an alert or error message
@@ -115,14 +111,14 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                   ),
                 ),
               ),
-              SizedBox(height: 10.h),
+              SizedBox(height: 20.h),
 
               //Number of pills
               TextField(
                 controller: _doseController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: "Number of Units Per Dose",
+                  labelText: "Number of Milligrams Per Dose",
                   labelStyle: TextStyles.font14Hint500Weight,
                   border: const OutlineInputBorder(
                     borderSide: BorderSide(
@@ -144,7 +140,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                   ),
                 ),
               ),
-              SizedBox(height: 10.h),
+              SizedBox(height: 20.h),
 
               // Frequency Dropdown
               DropdownButtonFormField<String>(
@@ -206,16 +202,18 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                   });
                 },
               ),
-              SizedBox(height: 10.h),
+              SizedBox(height: 20.h),
 
               // Time Inputs based on selected frequency
               if (_numTimesPerDay > 0) ...[
                 Column(
                   children: List.generate(_numTimesPerDay, (index) {
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: 10.h), // Adjust spacing here
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
                               onPressed: () => _pickTime(index),
                               style: ElevatedButton.styleFrom(
                                 padding: EdgeInsets.symmetric(vertical: 10.h),
@@ -226,74 +224,42 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                                     : 'Time: ${_selectedTimes[index]!.format(context)}',
                                 style: TextStyles.font14Hint500Weight
                                     .copyWith(color: ColorsManager.mainBlue),
-                              )),
-                        ),
-                      ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   }),
                 ),
-                SizedBox(height: 10.h),
+                SizedBox(height: 20.h),
               ],
 
-              // Timeframe (Start Day to End Day from surgery)
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _startDayController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: "Start Day (from surgery)",
-                        labelStyle: TextStyles.font14Hint500Weight,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.grey[400]!,
-                          ),
-                        ),
-                        enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.black,
-                            width: 1.5,
-                          ),
-                        ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: ColorsManager.mainBlue,
-                            width: 2.0,
-                          ),
-                        ),
-                      ),
+              // Timeframe In Days
+              TextField(
+                controller: _daysController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: "Number of Days",
+                  labelStyle: TextStyles.font14Hint500Weight,
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.grey[400]!,
                     ),
                   ),
-                  SizedBox(width: 10.w),
-                  Expanded(
-                    child: TextField(
-                      controller: _endDayController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: "End Day (from surgery)",
-                        labelStyle: TextStyles.font14Hint500Weight,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.grey[400]!,
-                          ),
-                        ),
-                        enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.black,
-                            width: 1.5,
-                          ),
-                        ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: ColorsManager.mainBlue,
-                            width: 2.0,
-                          ),
-                        ),
-                      ),
+                  enabledBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.black,
+                      width: 1.5,
                     ),
                   ),
-                ],
+                  focusedBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: ColorsManager.mainBlue,
+                      width: 2.0,
+                    ),
+                  ),
+                ),
               ),
               SizedBox(height: 20.h),
 
