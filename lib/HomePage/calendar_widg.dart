@@ -3,6 +3,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../GetStarted/enter_counseling_data.dart';
+import '../GetStarted/enter_prescription_data.dart';
 import '../GetStarted/get_started.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
@@ -336,18 +338,50 @@ class _CalendarWidgetState extends State<CalendarWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const GetStartedPage(), // no device needed
+              // --- Navigation Buttons (responsive with Wrap) ---
+              Wrap(
+                spacing: 2,
+                runSpacing: 10,
+                children: [
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const GetStartedPage()),
+                      );
+                    },
+                    child: const Text('Go to Setup'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const EnterPrescriptionData()),
+                      );
+                    },
+                    child: const Text('Prescriptions'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EnterCounselingPrompts(medications: []),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Counseling',
+                      textAlign: TextAlign.center, // allow wrapping
+                      softWrap: true,
                     ),
-                  );
-                },
-                child: const Text('Go to Setup'),
+                  ),
+                ],
               ),
-              // Calendar widget with custom builders
+
+              const SizedBox(height: 20),
+
+              // --- Calendar widget ---
               TableCalendar(
                 firstDay: DateTime(2020, 01, 01),
                 lastDay: DateTime(2050, 12, 31),
@@ -361,13 +395,46 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                 },
                 calendarFormat: CalendarFormat.month,
                 availableCalendarFormats: const {CalendarFormat.month: 'Month'},
+                calendarBuilders: CalendarBuilders(
+                  todayBuilder: (context, day, focusedDay) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: ColorsManager.mainBlue.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${day.day}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    );
+                  },
+                  defaultBuilder: (context, day, focusedDay) {
+                    final normalizedDate = DateTime(day.year, day.month, day.day);
+                    final isFutureDate = normalizedDate.isAfter(DateTime.now());
+                    final promptsForDay = _getPromptsForDay(normalizedDate);
+                    final medicationsForDay = _getMedicationsForDay(normalizedDate);
 
-                  calendarBuilders: CalendarBuilders(
-                    todayBuilder: (context, day, focusedDay) {
-                      // Circle for today's date
+                    if (isFutureDate && (promptsForDay.isNotEmpty || medicationsForDay.isNotEmpty)) {
                       return Container(
                         decoration: BoxDecoration(
-                          color: ColorsManager.mainBlue.withOpacity(0.5), // Today's color
+                          border: Border.all(color: Colors.purple.withOpacity(0.8), width: 2.0),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${day.day}',
+                            style: const TextStyle(color: Colors.black),
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (recoveryProgress[normalizedDate]?.isNotEmpty ?? false) {
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: ColorsManager.mainGreen.withOpacity(0.5),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -377,73 +444,30 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                           ),
                         ),
                       );
-                    },
-                    defaultBuilder: (context, day, focusedDay) {
-                      final normalizedDate = DateTime(day.year, day.month, day.day);
+                    }
 
-                      // Check if the date is in the future
-                      final isFutureDate = normalizedDate.isAfter(DateTime.now());
-
-                      // Fetch prompts and medications for this day
-                      final promptsForDay = _getPromptsForDay(normalizedDate);
-                      final medicationsForDay = _getMedicationsForDay(normalizedDate);
-
-                      // If there are prompts or medications and the date is in the future
-                      if (isFutureDate && (promptsForDay.isNotEmpty || medicationsForDay.isNotEmpty)) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.purple.withOpacity(0.8), width: 2.0),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${day.day}',
-                              style: const TextStyle(color: Colors.black),
-                            ),
-                          ),
-                        );
-                      }
-
-                      // If there is recovery progress
-                      if (recoveryProgress[normalizedDate]?.isNotEmpty ?? false) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: ColorsManager.mainGreen.withOpacity(0.5), // Green background for recovery progress
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${day.day}',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        );
-                      }
-
-                      return null; // Use default style
-                    },
-                    selectedBuilder: (context, day, focusedDay) {
-                      // Custom styling for selected day
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: ColorsManager.mainBlue,
-                          shape: BoxShape.circle,
+                    return null;
+                  },
+                  selectedBuilder: (context, day, focusedDay) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: ColorsManager.mainBlue,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${day.day}',
+                          style: const TextStyle(color: Colors.white),
                         ),
-                        child: Center(
-                          child: Text(
-                            '${day.day}',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
+                ),
               ),
 
+              const SizedBox(height: 20),
 
-                  const SizedBox(height: 20),
-
-              // Recovery Progress Section (conditional rendering)
+              // --- Recovery Progress Section ---
               if (recoveryProgressForDay.isNotEmpty) ...[
                 Center(
                   child: Text(
@@ -455,12 +479,11 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                 const SizedBox(height: 10),
                 Center(
                   child: Wrap(
-                    spacing: 10.0, // Space between items horizontally
-                    runSpacing: 10.0, // Space between rows
+                    spacing: 10.0,
+                    runSpacing: 10.0,
                     children: recoveryProgressForDay.map((progress) {
                       return Container(
-                        width: (MediaQuery.of(context).size.width - 40) /
-                            3, // 3 items per row
+                        width: (MediaQuery.of(context).size.width - 40) / 3,
                         padding: const EdgeInsets.all(8.0),
                         decoration: BoxDecoration(
                           color: ColorsManager.mainBlue.withOpacity(0.2),
@@ -480,7 +503,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                 const SizedBox(height: 20),
               ],
 
-              // Prompts Section
+              // --- Prompts Section ---
               if (promptsForDay.isNotEmpty) ...[
                 Center(
                   child: Text(
@@ -516,11 +539,10 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                     }).toList(),
                   ),
                 ),
+                const SizedBox(height: 20),
               ],
 
-              const SizedBox(height: 20),
-
-              // Medications Section
+              // --- Medications Section ---
               if (medicationsForDay.isNotEmpty) ...[
                 Center(
                   child: Text(
