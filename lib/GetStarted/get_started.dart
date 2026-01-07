@@ -3,7 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rive/rive.dart' as rive;
 import 'package:gap/gap.dart';
 import 'NIU surgery_selection_screen.dart';
-import 'enter_prescription_data.dart';
+import 'enter_medication_data.dart';
 import '../LoginComp/theming/styles.dart';
 import '../Helpers/rive_controller.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';

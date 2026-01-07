@@ -4,7 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../GetStarted/enter_counseling_data.dart';
-import '../GetStarted/enter_prescription_data.dart';
+import '../GetStarted/enter_medication_data.dart';
 import '../GetStarted/get_started.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
@@ -141,12 +141,18 @@ class _CalendarWidgetState extends State<CalendarWidget> {
 
     // Parse widget medications
     final widgetMedications = widget.medications.where((medication) {
-      final numDays = int.parse(medication['numDays']!);
+      // FIX: Support both old and new field names
+      final numDaysStr = medication['numberOfDays'] ?? medication['numDays'];
+      final numDays = int.tryParse(numDaysStr ?? '') ?? 0;
+
+      // Prevent crashes if numDays is missing
+      if (numDays == 0) return false;
+
       final medicationStartDay = widget.StartDate.add(Duration(days: -1));
       final lastMedicationDay =
       widget.StartDate.add(Duration(days: numDays - 1));
-      return day
-          .isAfter(medicationStartDay.subtract(const Duration(days: 1))) &&
+
+      return day.isAfter(medicationStartDay.subtract(const Duration(days: 1))) &&
           day.isBefore(lastMedicationDay.add(const Duration(days: 1)));
     }).toList();
 
@@ -154,7 +160,8 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     final mergedMedications = <Map<String, dynamic>>[
       ...parsedHiveMedications,
       ...widgetMedications.where((newMedication) =>
-      !parsedHiveMedications.any((existing) => existing['medication'] == newMedication['medication']))
+      !parsedHiveMedications.any(
+              (existing) => existing['medication'] == newMedication['medication']))
     ];
 
     // Save merged data back to Hive only if it has changed
@@ -359,7 +366,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                         MaterialPageRoute(builder: (_) => const EnterPrescriptionData()),
                       );
                     },
-                    child: const Text('Prescriptions'),
+                    child: const Text('Medications'),
                   ),
                   ElevatedButton(
                     onPressed: () {

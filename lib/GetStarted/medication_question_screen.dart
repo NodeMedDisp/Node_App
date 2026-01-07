@@ -1,7 +1,7 @@
 
 import 'package:gap/gap.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import '/GetStarted/enter_prescription_data.dart';
+import '/GetStarted/enter_medication_data.dart';
 
 import 'package:flutter/material.dart';
 import '/../../LoginComp/theming/styles.dart';

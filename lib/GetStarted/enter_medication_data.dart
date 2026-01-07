@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import '../LoginComp/core/widgets/MedicationEntryPage.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
 import 'counseling_questions_screen.dart';
@@ -293,6 +294,24 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                         "${medication['medication']} - ${medication['frequency']} ",
                         style: TextStyle(fontSize: 16.sp),
                       ),
+                        // 👉 Tap to edit
+                        onTap: () async {
+                          final updatedMedication = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MedicationEntryPage(
+                                medication: medications[index],
+                              ),
+                            ),
+                          );
+
+                          if (updatedMedication != null) {
+                            setState(() {
+                              medications[index] = updatedMedication;
+                            });
+                          }
+                        },
+
                         // Add a trailing delete button
                         trailing: IconButton(
                           icon: Icon(Icons.delete, color: Colors.grey),
