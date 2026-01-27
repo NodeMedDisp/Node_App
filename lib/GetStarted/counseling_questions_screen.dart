@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -29,11 +30,21 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
 
   // Function to save the response to a file
   Future<void> _saveResponseToFile(String response) async {
+    // Skip file saving entirely on Web
+    if (kIsWeb) {
+      print("Web mode: skipping file write for counseling response.");
+      return;
+    }
+
     final directory = await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/user_responses.txt');
+
     await file.writeAsString(
-        'Mental Health Counseling: $response\n', mode: FileMode.append);
+      'Mental Health Counseling: $response\n',
+      mode: FileMode.append,
+    );
   }
+
 
   void _handleContinue() async {
     await _saveResponseToFile(_selectedOption!);
