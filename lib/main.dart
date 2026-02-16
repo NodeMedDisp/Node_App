@@ -1,10 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/adapters.dart';
+import 'package:rive/rive.dart';
 import 'LoginComp/logic/cubit/auth_cubit.dart'; // Update the import path
 import 'firebase_options.dart';
 import 'LoginComp/routing/app_router.dart';
@@ -13,6 +15,11 @@ import 'LoginComp/theming/colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Required for Flutter Web when using Rive
+  if (kIsWeb) {
+    await RiveFile.initialize();
+  }
 
   await Hive.initFlutter();
 

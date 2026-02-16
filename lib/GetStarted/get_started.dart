@@ -2,27 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rive/rive.dart' as rive;
 import 'package:gap/gap.dart';
-import 'NIU surgery_selection_screen.dart';
-import 'enter_prescription_data.dart';
+import 'enter_medication_data.dart';
 import '../LoginComp/theming/styles.dart';
 import '../Helpers/rive_controller.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
-// Add this import if you want to differentiate mock mode visually
-import 'package:flutter/services.dart'; // Optional for haptic feedback
+import 'package:flutter/services.dart';
 
 class GetStartedPage extends StatefulWidget {
   final BluetoothDevice? device;
-  final bool isMockDevice; // NEW: flag to indicate mock mode
+  final bool isMockDevice;
 
-  const GetStartedPage({super.key, this.device, this.isMockDevice = false});
+  const GetStartedPage({
+    super.key,
+    this.device,
+    this.isMockDevice = false,
+  });
 
   @override
   _GetStartedPageState createState() => _GetStartedPageState();
 }
 
 class _GetStartedPageState extends State<GetStartedPage> {
-  final RiveAnimationControllerHelper riveHelper = RiveAnimationControllerHelper();
+  final RiveAnimationControllerHelper riveHelper =
+  RiveAnimationControllerHelper();
 
   @override
   void initState() {
@@ -55,76 +57,96 @@ class _GetStartedPageState extends State<GetStartedPage> {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 30.w),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/images/NodeLogo.png',
-                height: 200.h,
-                width: 200.w,
-              ),
-              Gap(0.h),
-              SizedBox(
-                height: 300.h,
-                width: 300.w,
-                child: riveHelper.riveArtboard != null
-                    ? rive.Rive(
-                  artboard: riveHelper.riveArtboard!,
-                  fit: BoxFit.contain,
-                  alignment: Alignment.center,
-                )
-                    : const CircularProgressIndicator(),
-              ),
-              const Spacer(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxHeight = constraints.maxHeight;
+            final maxWidth = constraints.maxWidth;
 
-              // Main button
-              ElevatedButton(
-                onPressed: widget.device != null || isMock ? _navigateToPrescriptionData : null,
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 40.w, vertical: 15.h),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.r),
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: 30.w),
+              child: Column(
+                children: [
+                  // Logo (scales automatically)
+                  SizedBox(
+                    height: maxHeight * 0.18,
+                    child: FittedBox(
+                      child: Image.asset('assets/images/NodeLogo.png'),
+                    ),
                   ),
-                ),
-                child: Text(
-                  isMock
-                      ? 'Simulating recovery with a mock device. Let’s get started!'
-                      : 'Sunny will help you with your patient’s recovery. Let’s get started!',
-                  textAlign: TextAlign.center,
-                  style: TextStyles.font14Blue400Weight,
-                ),
-              ),
 
-              Gap(20.h),
+                  // Rive animation (scales with screen)
+                  SizedBox(
+                    height: maxHeight * 0.35,
+                    child: riveHelper.riveArtboard != null
+                        ? rive.Rive(
+                      artboard: riveHelper.riveArtboard!,
+                      fit: BoxFit.contain,
+                    )
+                        : const Center(child: CircularProgressIndicator()),
+                  ),
 
-              // Debug button for testing without Bluetooth
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const GetStartedPage(
-                        device: null,
-                        isMockDevice: true, // NEW: enable mock mode
+                  const Spacer(),
+
+                  // Main button
+                  SizedBox(
+                    width: maxWidth * 0.9,
+                    child: ElevatedButton(
+                      onPressed: widget.device != null || isMock
+                          ? _navigateToPrescriptionData
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(
+                          vertical: maxHeight * 0.02,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10.r),
+                        ),
+                      ),
+                      child: Text(
+                        isMock
+                            ? 'Simulating recovery with a mock device. Let’s get started!'
+                            : 'Sunny will help you with your patient’s recovery. Let’s get started!',
+                        textAlign: TextAlign.center,
+                        style: TextStyles.font14Blue400Weight,
                       ),
                     ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[300],
-                  padding: EdgeInsets.symmetric(horizontal: 30.w, vertical: 10.h),
-                ),
-                child: const Text(
-                  'Debug: Use Mock BLE Device',
-                  style: TextStyle(color: Colors.black),
-                ),
-              ),
+                  ),
 
-              const Spacer(),
-            ],
-          ),
+                  Gap(maxHeight * 0.02),
+
+                  // Debug button
+                  SizedBox(
+                    width: maxWidth * 0.9,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const GetStartedPage(
+                              device: null,
+                              isMockDevice: true,
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[300],
+                        padding: EdgeInsets.symmetric(
+                          vertical: maxHeight * 0.015,
+                        ),
+                      ),
+                      child: const Text(
+                        'Debug: Use Mock BLE Device',
+                        style: TextStyle(color: Colors.black),
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -132,7 +154,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
 
   @override
   void dispose() {
-    super.dispose();
     riveHelper.dispose();
+    super.dispose();
   }
 }

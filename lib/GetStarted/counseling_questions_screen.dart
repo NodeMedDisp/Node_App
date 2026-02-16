@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -29,14 +31,41 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
 
   // Function to save the response to a file
   Future<void> _saveResponseToFile(String response) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/user_responses.txt');
-    await file.writeAsString(
-        'Mental Health Counseling: $response\n', mode: FileMode.append);
+    // Fast path for web
+    if (kIsWeb) {
+      // Optionally persist to localStorage here if desired
+      print("Web mode: skipping file write for counseling response.");
+      return;
+    }
+
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/user_responses.txt');
+      await file.writeAsString(
+        'Mental Health Counseling: $response\n',
+        mode: FileMode.append,
+      );
+    } on MissingPluginException catch (e) {
+      // Plugin not registered for this platform — skip gracefully
+      print('MissingPluginException while saving response: $e — skipping file write.');
+      return;
+    } on PlatformException catch (e) {
+      // Platform channel error — log and continue
+      print('PlatformException while saving response: $e');
+      return;
+    } catch (e, st) {
+      // Any other unexpected error — log for debugging but don't block navigation
+      print('Unexpected error saving response: $e\n$st');
+      return;
+    }
   }
 
   void _handleContinue() async {
+    if (_selectedOption == null) return;
+
+    // Ensure saving errors don't block navigation
     await _saveResponseToFile(_selectedOption!);
+
     if (_selectedOption == 'Yes') {
       Navigator.push(
         context,
