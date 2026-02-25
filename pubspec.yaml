@@ -49,6 +49,7 @@ dependencies:
   flutter_blue_plus: ^1.7.0
   shared_preferences: ^2.3.2
   permission_handler: ^11.0.0 #For handling bluetooth permissions
+  equatable: ^2.0.0 #NEW
 
 
 

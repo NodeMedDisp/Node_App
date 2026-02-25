@@ -17,19 +17,23 @@ class CalendarWidget extends StatefulWidget {
   final List<Map<String, dynamic>> prompts;
   final List<Map<String, dynamic>> medications;
   final DateTime StartDate; // To calculate days for activities and medications
+  final DateTime? externalFocusDay; // NEW
+  final Map<DateTime, List<String>>? externalRecoveryProgress; // NEW
 
   const CalendarWidget({
     super.key,
     required this.prompts,
     required this.medications,
     required this.StartDate,
+    this.externalFocusDay, // NEW
+    this.externalRecoveryProgress, // NEW
   });
 
   @override
-  _CalendarWidgetState createState() => _CalendarWidgetState();
+  CalendarWidgetState createState() => CalendarWidgetState();
 }
 
-class _CalendarWidgetState extends State<CalendarWidget> {
+class CalendarWidgetState extends State<CalendarWidget> {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
   bool isBluetoothConnected = false; // Track Bluetooth connection status
@@ -63,6 +67,27 @@ class _CalendarWidgetState extends State<CalendarWidget> {
   Prompt: What are your goals for today? Response: Respond in Journal
   ''';
 
+  // NEW
+  @override
+  void didUpdateWidget(covariant CalendarWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Provider wants to focus on a specific day
+    if (widget.externalFocusDay != null &&
+        widget.externalFocusDay != oldWidget.externalFocusDay) {
+      _focusedDay = widget.externalFocusDay!;
+      _selectedDay = widget.externalFocusDay!;
+    }
+
+    // Provider injected new recovery progress
+    if (widget.externalRecoveryProgress != null &&
+        widget.externalRecoveryProgress != oldWidget.externalRecoveryProgress) {
+      recoveryProgress = {
+        ...recoveryProgress,
+        ...widget.externalRecoveryProgress!,
+      };
+    }
+  }
 
   @override
   void initState() {
@@ -72,11 +97,15 @@ class _CalendarWidgetState extends State<CalendarWidget> {
 
     // Load persisted data into memory
     _loadRecoveryProgress();
-
-// Parse test content
- // _parseProgressData(testContent);
-
     _checkBluetoothConnection(); // Check Bluetooth connection on init
+  }
+
+  // NEW
+  void focusOn(DateTime day) {
+    setState(() {
+      _selectedDay = day;
+      _focusedDay = day;
+    });
   }
 
   // Get prompts for day with Hive integration

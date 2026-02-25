@@ -81,13 +81,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   desc: state.message,
                 ).show();
               } else if (state is UserSignIn) {
-                await _saveUserRole(_userType, _clinicCodeController.text);  // Save user role
+                await _saveUserRole(_userType, _clinicCodeController.text);
                 await Future.delayed(const Duration(seconds: 2));
                 if (!context.mounted) return;
-                context.pushNamedAndRemoveUntil(
-                  Routes.homeScreen,
-                  predicate: (route) => false,
-                );
+
+                if (_userType == 'Provider') {
+                  context.pushNamedAndRemoveUntil(
+                    Routes.providerMain,
+                    predicate: (route) => false,
+                    arguments: {
+                      'clinicCode': _clinicCodeController.text,
+                    },
+                  );
+                } else {
+                  context.pushNamedAndRemoveUntil(
+                    Routes.homeScreen,
+                    predicate: (route) => false,
+                  );
+                }
               } else if (state is UserNotVerified) {
                 AwesomeDialog(
                   context: context,
