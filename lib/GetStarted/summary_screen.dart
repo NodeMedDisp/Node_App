@@ -4,16 +4,17 @@ import 'dart:io';
 import 'dart:async';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
-import '/../HomePage/home_page.dart';
-import '/../HomePage/calendar_widg.dart';  // Import the new CalendarWidget file
-import '/../../LoginComp/theming/styles.dart';
-import '/../../LoginComp/theming/colors.dart';
-import 'package:intl/intl.dart'; // For date and time formatting
+import '../HomePage/home_page.dart';
+import '../HomePage/calendar_widg.dart';
+import '../LoginComp/routing/routes.dart';
+import '../LoginComp/theming/colors.dart';
+import 'package:intl/intl.dart';
+import '../models/medication.dart';
+import '../models/counseling_question.dart';
 
 class RecoverySummaryScreen extends StatefulWidget {
-  final List<Map<String, dynamic>> prompts;
-  final List<Map<String, String>> medications;
+  final List<CounselingQuestion> prompts;
+  final List<Medication> medications;
   final BluetoothDevice? device;
 
   const RecoverySummaryScreen({
@@ -28,53 +29,43 @@ class RecoverySummaryScreen extends StatefulWidget {
 }
 
 class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
-  DateTime StartDate = DateTime.now(); // Default surgery date
+  DateTime StartDate = DateTime.now();
 
-  // Save the prompts and medications to a file
   Future<void> _saveDataToFile() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/user_responses.txt');
       print('File saved at: ${file.path}');
 
-
-      // Function to get current time in a specific format
       String getCurrentTime() {
         final now = DateTime.now();
         return DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
       }
 
-      // Add current time to the file
       final currentTime = getCurrentTime();
       await file.writeAsString('Current Time: $currentTime\n', mode: FileMode.write);
 
-      // Save medications
       for (var medication in widget.medications) {
         await file.writeAsString(
-          '\nMedication: ${medication["medication"]}\nDose: ${medication["dose"]}\nFrequency: ${medication["frequency"]}\n'
-              'Times: ${medication["times"]}\n'
-              'Days: ${medication["startDay"]} to ${medication["endDay"]}\n',
+          '\nMedication: ${medication.name}\nDose: ${medication.dose}\nFrequency: ${medication.frequency}\n'
+              'Times: ${medication.times}\n'
+              'Days: ${medication.numDays}\n',
           mode: FileMode.append,
         );
       }
 
-      // Save prompts with
       for (var prompt in widget.prompts) {
-        final options = prompt.containsKey('options') && prompt['options'] != null
-            ? (prompt['options'] as List<String>).join(', ')
-            : 'No options';
+        final options = prompt.options.join(', ');
 
         await file.writeAsString(
-          '\nPrompt: ${prompt["prompt"]}\n'
-              'Required Response: ${prompt["resReq"]}\n'
+          '\nPrompt: ${prompt.prompt}\n'
+              'Required Response: ${prompt.resReq}\n'
               'Options: $options\n'
-              'Days: ${prompt["startDay"]} to ${prompt["endDay"]}\n',
+              'Days: ${prompt.numberOfDays}\n',
           mode: FileMode.append,
         );
-        showFileContents();
       }
 
-      // End of file marker
       await file.writeAsString('EOF\n', mode: FileMode.append);
       print('Data saved to file successfully!');
     } catch (e) {
@@ -82,53 +73,16 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
     }
   }
 
-  // Show file contents
-  Future<void> showFileContents() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/user_responses.txt');
-
-    if (await file.exists()) {
-      final contents = await file.readAsString();
-      print('File contents:\n$contents');
-    } else {
-      print('File not found.');
-    }
-  }
-
-
-  // Locate the file in local storage
-  Future<String?> locateFile() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();  // Use path_provider to get the file directory
-      final filePath = '${directory.path}/user_responses.txt';
-      return filePath;
-    } catch (e) {
-      print('Error locating file: $e');
-      return null;
-    }
-  }
-
-  // Read the file's contents
-  Future<String> readFile(String path) async {
-    try {
-      final file = File(path);
-      return await file.readAsString();  // Read file content as a string
-    } catch (e) {
-      print('Error reading file: $e');
-      return '';
-    }
-  }
-
-  // Function to send the file content to the connected BLE device
   Future<void> sendFileToDevice(BluetoothDevice device) async {
     try {
-      final filePath = await locateFile();
-      if (filePath == null) {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/user_responses.txt');
+      if (!await file.exists()) {
         print("File not found.");
         return;
       }
 
-      String fileContent = await readFile(filePath);
+      String fileContent = await file.readAsString();
       if (fileContent.isEmpty) {
         print("File is empty.");
         return;
@@ -139,7 +93,7 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
         for (var characteristic in service.characteristics) {
           if (characteristic.properties.write) {
             List<int> bytes = fileContent.codeUnits;
-            int chunkSize = 20;  // BLE payload size is typically 20 bytes
+            int chunkSize = 20;
 
             for (int i = 0; i < bytes.length; i += chunkSize) {
               List<int> chunk = bytes.sublist(i, (i + chunkSize > bytes.length) ? bytes.length : i + chunkSize);
@@ -163,11 +117,10 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
         child: Column(
           children: [
             Expanded(
-              // Use the new CalendarWidget here to display the calendar with prompts and medications
               child: CalendarWidget(
                 prompts: widget.prompts,
                 medications: widget.medications,
-                StartDate: StartDate,  // Pass surgery date here
+                StartDate: StartDate,
               ),
             ),
           ],
@@ -179,26 +132,27 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
           width: double.infinity,
           child: ElevatedButton(
             onPressed: () async {
-              await _saveDataToFile();   // Save the data
+              await _saveDataToFile();
               if (widget.device != null) {
-                await sendFileToDevice(widget.device!); // Send to real BLE device
+                await sendFileToDevice(widget.device!);
               } else {
                 print("Mock mode: skipping BLE transmission");
               }
 
-              Navigator.push(
+              if (!context.mounted) return;
+              Navigator.pushNamedAndRemoveUntil(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => HomePage(
-                    prompts: widget.prompts,
-                    medications: widget.medications,
-                  ),
-                ),
+                Routes.homeScreen,
+                (route) => false,
+                arguments: {
+                  'prompts': widget.prompts,
+                  'medications': widget.medications,
+                },
               );
             },
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 15),
-              backgroundColor: Colors.white,  // Customize as needed
+              backgroundColor: Colors.white,
             ),
             child: const Text(
               "Send to Device and Continue",

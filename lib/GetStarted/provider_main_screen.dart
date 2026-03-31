@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../HomePage/calendar_widg.dart';
 import '../LoginComp/logic/provider/provider_cubit.dart';
 import '../LoginComp/logic/provider/provider_state.dart';
+import '../LoginComp/routing/routes.dart';
 
 class ProviderMainScreen extends StatefulWidget {
   final String? clinicCode;
@@ -16,14 +17,11 @@ class ProviderMainScreen extends StatefulWidget {
 }
 
 class _ProviderMainScreenState extends State<ProviderMainScreen> {
-  // Key to control the calendar widget
   final GlobalKey<CalendarWidgetState> _calendarKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-
-    // Load provider data for this clinic
     context.read<ProviderCubit>().loadClinicData(widget.clinicCode);
   }
 
@@ -36,17 +34,14 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
           style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.bold),
         ),
       ),
-
       body: Row(
         children: [
-          // ----------------------------------------------------------
-          // LEFT SIDE — USER/DEVICE LIST
-          // ----------------------------------------------------------
+          // LEFT SIDE — USER LIST
           Expanded(
             flex: 3,
             child: BlocBuilder<ProviderCubit, ProviderState>(
               builder: (context, state) {
-                final users = state.users; // list of provider's users
+                final users = state.users;
                 final selectedUser = state.selectedUser;
 
                 if (state.loading) {
@@ -54,9 +49,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                 }
 
                 if (users.isEmpty) {
-                  return const Center(
-                    child: Text("No users found for this clinic."),
-                  );
+                  return const Center(child: Text("No users found."));
                 }
 
                 return ListView.separated(
@@ -69,24 +62,20 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
 
                     return ListTile(
                       tileColor: isSelected
-                          ? Colors.blue.withOpacity(0.15)
+                          ? Colors.blue.withValues(alpha: 0.15)
                           : Colors.transparent,
                       title: Text(
                         user.displayName,
                         style: TextStyle(
                           fontSize: 16.sp,
-                          fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                       subtitle: Text("Device: ${user.deviceId}"),
                       onTap: () {
                         context.read<ProviderCubit>().selectUser(user);
-
-                        // Focus calendar on the user's most recent recovery entry
                         if (user.latestEntryDate != null) {
-                          _calendarKey.currentState
-                              ?.focusOn(user.latestEntryDate!);
+                          _calendarKey.currentState?.focusOn(user.latestEntryDate!);
                         }
                       },
                     );
@@ -96,9 +85,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
             ),
           ),
 
-          // ----------------------------------------------------------
           // RIGHT SIDE — CALENDAR
-          // ----------------------------------------------------------
           Expanded(
             flex: 6,
             child: BlocBuilder<ProviderCubit, ProviderState>(
@@ -107,28 +94,53 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
 
                 if (selectedUser == null) {
                   return const Center(
-                    child: Text(
-                      "Select a user to view their recovery calendar.",
-                      style: TextStyle(fontSize: 16),
-                    ),
+                    child: Text("Select a user to view their recovery calendar."),
                   );
                 }
 
-                return CalendarWidget(
-                  key: _calendarKey,
+                // FORCE REFRESH: Key ensures CalendarWidget state is reset when user changes
+                final keyString = 'provider_${selectedUser.id}_${state.demoMedications.length}_${state.demoPrompts.length}';
 
-                  // Provider does NOT use user prompts/medications
-                  prompts: const [],
-                  medications: const [],
-
-                  // Start date for the calendar (use user's first entry or today)
-                  StartDate: selectedUser.startDate ?? DateTime.now(),
-
-                  // Inject recovery progress from ProviderCubit
-                  externalRecoveryProgress: state.recoveryMap,
-
-                  // Focus calendar on selected user's most recent entry
-                  externalFocusDay: selectedUser.latestEntryDate,
+                return Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.all(16.w),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Viewing: ${selectedUser.displayName}",
+                            style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              // FORCE CUBIT SOURCE: Pull arguments directly from state at click time
+                              final currentState = context.read<ProviderCubit>().state;
+                              Navigator.pushNamed(
+                                context,
+                                Routes.homeScreen,
+                                arguments: {
+                                  'medications': currentState.demoMedications,
+                                  'prompts': currentState.demoPrompts,
+                                },
+                              );
+                            },
+                            icon: const Icon(Icons.open_in_new),
+                            label: const Text("View Patient App"),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: CalendarWidget(
+                        key: ValueKey(keyString),
+                        prompts: state.demoPrompts,
+                        medications: state.demoMedications,
+                        StartDate: selectedUser.startDate ?? DateTime.now(),
+                        externalFocusDay: selectedUser.latestEntryDate,
+                      ),
+                    ),
+                  ],
                 );
               },
             ),

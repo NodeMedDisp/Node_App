@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../theming/colors.dart';
 import '../../theming/styles.dart';
-import '/../../LoginComp/theming/styles.dart';
-import '/../../LoginComp/theming/colors.dart';
 import 'package:intl/intl.dart';
-
+import '../../../models/medication.dart';
 
 class MedicationEntryPage extends StatefulWidget {
-  final Map<String, String>? medication; // null = add mode
+  final Medication? medication; // null = add mode
 
   const MedicationEntryPage({super.key, this.medication});
 
@@ -32,14 +29,14 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
 
     if (widget.medication != null) {
       // Pre-fill basic fields
-      _medicationController.text = widget.medication!['medication'] ?? '';
-      _doseController.text = widget.medication!['dose'] ?? '';
-      _daysController.text = widget.medication!['numberOfDays'] ?? '';
-      _frequency = widget.medication!['frequency'];
+      _medicationController.text = widget.medication!.name;
+      _doseController.text = widget.medication!.dose;
+      _daysController.text = widget.medication!.numDays.toString();
+      _frequency = widget.medication!.frequency;
 
-      // Pre-fill times: parse the SAME format you used originally (time.format(context))
-      final timesString = widget.medication!['times'];
-      if (timesString != null && timesString.isNotEmpty) {
+      // Pre-fill times
+      final timesString = widget.medication!.times;
+      if (timesString.isNotEmpty) {
         final timeStrings = timesString.split(',');
 
         final locale = WidgetsBinding.instance.platformDispatcher.locale;
@@ -51,7 +48,6 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             final dt = formatter.parse(t);
             return TimeOfDay(hour: dt.hour, minute: dt.minute);
           } catch (_) {
-            // If parsing fails for any reason, skip this time
             return null;
           }
         }).toList();
@@ -130,7 +126,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             ),
             SizedBox(height: 20.h),
 
-            // Frequency Dropdown (your exact style/logic)
+            // Frequency Dropdown
             DropdownButtonFormField<String>(
               decoration: InputDecoration(
                 labelText: "How often will the medication be taken?",
@@ -180,7 +176,6 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                       _numTimesPerDay = 0;
                   }
 
-                  // Keep as many existing times as possible when frequency changes
                   if (_selectedTimes.length >= _numTimesPerDay) {
                     _selectedTimes =
                         _selectedTimes.sublist(0, _numTimesPerDay);
@@ -198,12 +193,12 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             ),
             SizedBox(height: 20.h),
 
-            // Time Inputs based on selected frequency
+            // Time Inputs
             if (_numTimesPerDay > 0) ...[
               Column(
                 children: List.generate(_numTimesPerDay, (index) {
                   return Padding(
-                    padding: EdgeInsets.only(bottom: 10.h), // Adjust spacing here
+                    padding: EdgeInsets.only(bottom: 10.h),
                     child: Row(
                       children: [
                         Expanded(
@@ -255,19 +250,18 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  // Use the SAME format you use in enter_medication_data.dart
                   final times = _selectedTimes
                       .where((time) => time != null)
-                      .map((time) => time!.format(context))  // Format the TimeOfDay as a readable string
+                      .map((time) => time!.format(context))
                       .toList();
 
-                  Navigator.pop(context, {
-                    'medication': _medicationController.text,
-                    'dose': _doseController.text,
-                    'frequency': _frequency ?? '',
-                    'numberOfDays': _daysController.text,
-                    "times": times.join(', '),
-                  });
+                  Navigator.pop(context, Medication(
+                    name: _medicationController.text,
+                    dose: _doseController.text,
+                    frequency: _frequency ?? '',
+                    numDays: int.tryParse(_daysController.text) ?? 0,
+                    times: times.join(', '),
+                  ));
                 },
                 child: Text(
                   widget.medication == null ? "Add Medication" : "Save Changes",

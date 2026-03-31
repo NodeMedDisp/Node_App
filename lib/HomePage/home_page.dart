@@ -7,10 +7,12 @@ import '/../LoginComp/logic/cubit/auth_cubit.dart'; // Import your AuthCubit
 import '/../LoginComp/screens/login/ui/login_screen.dart'; // Import your LoginScreen
 import '/HomePage/calendar_widg.dart'; // Import your CalendarWidget
 import '/../Bluetooth/bluetooth_trial.dart'; // Import the Bluetooth Setup Screen
+import '../models/medication.dart';
+import '../models/counseling_question.dart';
 
 class HomePage extends StatefulWidget {
-  final List<Map<String, dynamic>> prompts;
-  final List<Map<String, String>> medications;
+  final List<CounselingQuestion> prompts;
+  final List<Medication> medications;
 
   const HomePage({
     super.key,

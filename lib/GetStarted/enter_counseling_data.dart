@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'summary_screen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import '../LoginComp/logic/provider/provider_cubit.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // Import FlutterBluePlus
+import 'package:flutter_blue_plus/flutter_blue_plus.dart'; 
+import '../models/medication.dart';
+import '../models/counseling_question.dart';
 
 class EnterCounselingPrompts extends StatefulWidget {
-  final List<Map<String, String>> medications;
-  final BluetoothDevice? device; // Add this to accept the Bluetooth device
+  final List<Medication> medications;
+  final BluetoothDevice? device; 
 
   const EnterCounselingPrompts({super.key, required this.medications, this.device});
 
@@ -19,12 +23,11 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
   final TextEditingController _promptController = TextEditingController();
   final TextEditingController _daysController = TextEditingController();
 
-  String _responseRequired = 'Require a Response?'; // Default dropdown value
-  String? _responseType; // Holds the selected response type ("Yes/No" or "1-10 Scale")
-  List<Map<String, dynamic>> prompts = []; // Store prompts
-  String? _errorMessage; // Error message for invalid input
+  String _responseRequired = 'Require a Response?'; 
+  String? _responseType; 
+  List<CounselingQuestion> prompts = []; 
+  String? _errorMessage; 
 
-  // Add Prompt method
   void _addPrompt() {
     List<String> options = [];
 
@@ -35,84 +38,81 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
         });
         return;
       }
-
-      // Generate options based on the selected response type
-      if (_responseType == 'Yes/Journal Response') {
-        options = ['Yes', 'Journal Response'];
+      if (_responseType == 'Yes/No') {
+        options = ['Yes', 'No'];
       } else if (_responseType == '1-10 Scale') {
-        options = List.generate(10, (index) => (index + 1).toString()); // 1-10 as options
+        options = List.generate(10, (index) => (index + 1).toString()); 
       }
     } else {
-      options = ['Respond in Journal']; // Default for no response required
+      options = ['Respond in Journal']; 
+    }
+
+    final newPrompt = CounselingQuestion(
+      prompt: _promptController.text,
+      resReq: _responseRequired,
+      options: options,
+      numberOfDays: int.tryParse(_daysController.text) ?? 0,
+    );
+
+    // Check if we are in the Provider flow
+    ProviderCubit? providerCubit;
+    try {
+      providerCubit = context.read<ProviderCubit>();
+    } catch (_) {}
+
+    if (providerCubit != null) {
+      providerCubit.addPromptToSelectedUser(newPrompt);
+      Navigator.pop(context);
+      return;
     }
 
     setState(() {
-      // Add the current prompt data
-      prompts.add({
-        "prompt": _promptController.text,
-        "resReq": _responseRequired,
-        "responseType": _responseRequired == 'Yes' ? _responseType : null,
-        "options": options,
-        "numberOfDays": _daysController.text,
-      });
-
-      // Clear all fields after adding the prompt
+      prompts.add(newPrompt);
       _promptController.clear();
       _daysController.clear();
       _responseRequired = 'Require a Response?';
       _responseType = null;
-      _errorMessage = null; // Clear any error messages
+      _errorMessage = null; 
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    bool isProvider = false;
+    try {
+      isProvider = context.read<ProviderCubit>().state.selectedUser != null;
+    } catch (_) {}
+
     return Scaffold(
       appBar: AppBar(title: const Text("Enter Counseling Prompts")),
-      resizeToAvoidBottomInset: true, // Resizes content when the keyboard appears
+      resizeToAvoidBottomInset: true, 
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // Prompt Name Input
               TextField(
                 controller: _promptController,
                 decoration: InputDecoration(
                   labelText: "Enter Prompt Here",
                   labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Colors.grey[400]!,
-                    ),
-                  ),
+                  border: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey[400]!)),
                   enabledBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Colors.black,
-                      width: 1.5,
-                    ),
+                    borderSide: BorderSide(color: Colors.black, width: 1.5),
                   ),
                   focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: ColorsManager.mainBlue,
-                      width: 2.0,
-                    ),
+                    borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                   ),
                 ),
               ),
               SizedBox(height: 10.h),
-
-              // Response Required Dropdown
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       value: _responseRequired,
                       items: ['Require a Response?', 'Yes', 'Journal Response'].map((resReq) {
-                        return DropdownMenuItem<String>(
-                          value: resReq,
-                          child: Text(resReq),
-                        );
+                        return DropdownMenuItem<String>(value: resReq, child: Text(resReq));
                       }).toList(),
                       onChanged: (value) {
                         setState(() {
@@ -123,22 +123,12 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                         });
                       },
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.grey[400]!,
-                          ),
-                        ),
+                        border: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey[400]!)),
                         enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.black,
-                            width: 1.5,
-                          ),
+                          borderSide: BorderSide(color: Colors.black, width: 1.5),
                         ),
                         focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: ColorsManager.mainBlue,
-                            width: 2.0,
-                          ),
+                          borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                         ),
                       ),
                     ),
@@ -146,8 +136,6 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                 ],
               ),
               SizedBox(height: 10.h),
-
-              // Response Type Selection (Only shown if response is required)
               if (_responseRequired == 'Yes') ...[
                 const Text(
                   "Select Response Type:",
@@ -160,7 +148,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   onChanged: (value) {
                     setState(() {
                       _responseType = value;
-                      _errorMessage = null; // Clear error message
+                      _errorMessage = null; 
                     });
                   },
                 ),
@@ -171,7 +159,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   onChanged: (value) {
                     setState(() {
                       _responseType = value;
-                      _errorMessage = null; // Clear error message
+                      _errorMessage = null; 
                     });
                   },
                 ),
@@ -184,38 +172,23 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     style: TextStyle(color: Colors.red, fontSize: 12.sp),
                   ),
                 ),
-
               SizedBox(height: 10.h),
-
-              // Timeframe
               TextField(
                 controller: _daysController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: "Number of Days",
                   labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Colors.grey[400]!,
-                    ),
-                  ),
+                  border: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey[400]!)),
                   enabledBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Colors.black,
-                      width: 1.5,
-                    ),
+                    borderSide: BorderSide(color: Colors.black, width: 1.5),
                   ),
                   focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: ColorsManager.mainBlue,
-                      width: 2.0,
-                    ),
+                    borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                   ),
                 ),
               ),
               SizedBox(height: 20.h),
-
-              // Add Prompt Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -225,46 +198,38 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     backgroundColor: ColorsManager.mainBlue,
                   ),
                   child: Text(
-                    "Add Prompt",
+                    isProvider ? "Save Prompt" : "Add Prompt",
                     style: TextStyles.font14Hint500Weight.copyWith(color: Colors.white),
                   ),
                 ),
               ),
-              SizedBox(height: 20.h),
-
-              // Display Added Prompts
-              SizedBox(
-                height: 200.h,
-                child: ListView.builder(
-                  itemCount: prompts.length,
-                  itemBuilder: (context, index) {
-                    final prompt = prompts[index];
-                    return ListTile(
-                      title: Text(
-                        "${prompt['prompt']} (${prompt['numberOfDays']} day(s))",
-                        style: TextStyle(fontSize: 16.sp),
-                      ),
-                      subtitle: Text(
-                        "Response: ${prompt['resReq'] == 'Yes' ? '${prompt['responseType']}' : 'Respond in Journal'}",
-                        style: TextStyle(color: Colors.grey, fontSize: 14.sp),
-                      ),
-                      trailing: IconButton(
-                        icon: Icon(Icons.delete, color: Colors.grey),
-                        onPressed: () {
-                          setState(() {
-                            prompts.removeAt(index);
-                          });
-                        },
-                      ),
-                    );
-                  },
+              if (!isProvider) ...[
+                SizedBox(height: 20.h),
+                SizedBox(
+                  height: 200.h,
+                  child: ListView.builder(
+                    itemCount: prompts.length,
+                    itemBuilder: (context, index) {
+                      final prompt = prompts[index];
+                      return ListTile(
+                        title: Text("${prompt.prompt} (${prompt.numberOfDays} day(s))"),
+                        subtitle: Text("Response: ${prompt.resReq}"),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.grey),
+                          onPressed: () {
+                            setState(() { prompts.removeAt(index); });
+                          },
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
       ),
-      bottomNavigationBar: Padding(
+      bottomNavigationBar: isProvider ? null : Padding(
         padding: const EdgeInsets.all(16.0),
         child: SizedBox(
           width: double.infinity,
@@ -294,5 +259,3 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
     );
   }
 }
-
-

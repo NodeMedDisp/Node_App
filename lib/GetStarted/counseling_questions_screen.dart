@@ -10,9 +10,11 @@ import 'summary_screen.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // Import FlutterBluePlus
+import '../models/medication.dart';
+import '../models/counseling_question.dart';
 
 class CounselingQuestionScreen extends StatefulWidget {
-  final List<Map<String, String>> medications;
+  final List<Medication> medications;
   final BluetoothDevice? device;
 
   const CounselingQuestionScreen({
@@ -143,9 +145,9 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
 }
 
 class NoCounselingScreen extends StatelessWidget {
-  final List<Map<String, String>> medications;
+  final List<Medication> medications;
   final BluetoothDevice? device;
-  final List<Map<String, String>> prompts = []; // Empty activities list
+  final List<CounselingQuestion> prompts = []; // Empty activities list
 
   NoCounselingScreen({super.key, required this.medications, this.device});
 

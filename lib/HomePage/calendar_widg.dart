@@ -1,32 +1,37 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../GetStarted/enter_counseling_data.dart';
 import '../GetStarted/enter_medication_data.dart';
 import '../GetStarted/get_started.dart';
+import '../LoginComp/logic/provider/provider_cubit.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import '../models/medication.dart';
+import '../models/counseling_question.dart';
 
 class CalendarWidget extends StatefulWidget {
-  final List<Map<String, dynamic>> prompts;
-  final List<Map<String, dynamic>> medications;
-  final DateTime StartDate; // To calculate days for activities and medications
-  final DateTime? externalFocusDay; // NEW
-  final Map<DateTime, List<String>>? externalRecoveryProgress; // NEW
+  final List<CounselingQuestion> prompts;
+  final List<Medication> medications;
+  final DateTime StartDate; 
+  final DateTime? externalFocusDay; 
+  final Map<DateTime, List<Map<String, dynamic>>>? externalRecoveryProgress; 
 
   const CalendarWidget({
     super.key,
     required this.prompts,
     required this.medications,
     required this.StartDate,
-    this.externalFocusDay, // NEW
-    this.externalRecoveryProgress, // NEW
+    this.externalFocusDay, 
+    this.externalRecoveryProgress, 
   });
 
   @override
@@ -36,71 +41,51 @@ class CalendarWidget extends StatefulWidget {
 class CalendarWidgetState extends State<CalendarWidget> {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
-  bool isBluetoothConnected = false; // Track Bluetooth connection status
-  BluetoothCharacteristic? fileCharacteristic; // For the file characteristic
-  String fileContent = ""; // To store received file content
+  bool isBluetoothConnected = false; 
+  BluetoothCharacteristic? fileCharacteristic; 
+  String fileContent = ""; 
 
-  Map<DateTime, List<String>> recoveryProgress =
-      {}; // Stores progress entries by date
+  Map<DateTime, List<Map<String, dynamic>>> recoveryProgress = {}; 
 
-// Test content to simulate recovery progress data
-  String testContent = '''
-  Date: 2024-12-14
-  Medication Taken: 13:58:40
-  Prompt: How stressed are you today? Response: 7
-  Prompt: Have you taken non-prescribed opioids in the past 24 hours? Response: No
-  Prompt: Consider who your closest support network is. Response: Respond in Journal
-  Date: 2024-12-15
-  Medication Taken: 13:57:40
-  Prompt: How stressed are you today? Response: 4
-  Prompt: Have you taken non-prescribed opioids in the past 24 hours? Response: No
-  Prompt: What makes you feel most calm? Response: Respond in Journal
-  Date: 2024-12-16
-  Medication Taken: 13:59:00
-  Prompt: How stressed are you today? Response: 6
-  Prompt: Have you taken non-prescribed opioids in the past 24 hours? Response: No
-  Prompt: What are you proud about from yesterday? Response: Respond in Journal
-  Date: 2025-01-07
-  Medication Taken: 07:59:00
-  Prompt: How stressed are you today? Response: 4
-  Prompt: Have you taken non-prescribed opioids in the past 24 hours? Response: No
-  Prompt: What are your goals for today? Response: Respond in Journal
-  ''';
-
-  // NEW
-  @override
-  void didUpdateWidget(covariant CalendarWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // Provider wants to focus on a specific day
-    if (widget.externalFocusDay != null &&
-        widget.externalFocusDay != oldWidget.externalFocusDay) {
-      _focusedDay = widget.externalFocusDay!;
-      _selectedDay = widget.externalFocusDay!;
-    }
-
-    // Provider injected new recovery progress
-    if (widget.externalRecoveryProgress != null &&
-        widget.externalRecoveryProgress != oldWidget.externalRecoveryProgress) {
-      recoveryProgress = {
-        ...recoveryProgress,
-        ...widget.externalRecoveryProgress!,
-      };
+  String _formatProgressEntry(Map<String, dynamic> entry) {
+    switch (entry["type"]) {
+      case "medication":
+        return "Medication Taken: ${entry["time"]}";
+      case "prompt":
+        return "${entry["question"]}\nResponse: ${entry["response"]}";
+      default:
+        return entry.toString();
     }
   }
 
   @override
   void initState() {
     super.initState();
-    _focusedDay = widget.StartDate;
-    _selectedDay = widget.StartDate;
 
-    // Load persisted data into memory
-    _loadRecoveryProgress();
-    _checkBluetoothConnection(); // Check Bluetooth connection on init
+    _focusedDay = widget.externalFocusDay ?? widget.StartDate;
+    _selectedDay = _focusedDay;
+
+    // If we are in the provider dashboard, we don't want to load local Hive progress
+    // as that would show the current device's user data for EVERY patient.
+    bool isProvider = false;
+    try {
+      isProvider = context.read<ProviderCubit>().state.selectedUser != null;
+    } catch (_) {}
+
+    if (!isProvider) {
+      _loadRecoveryProgress();
+    }
+
+    if (widget.externalRecoveryProgress != null) {
+      recoveryProgress = {
+        ...recoveryProgress,
+        ...widget.externalRecoveryProgress!,
+      };
+    }
+
+    _checkBluetoothConnection();
   }
 
-  // NEW
   void focusOn(DateTime day) {
     setState(() {
       _selectedDay = day;
@@ -108,169 +93,80 @@ class CalendarWidgetState extends State<CalendarWidget> {
     });
   }
 
-  // Get prompts for day with Hive integration
-  List<Map<String, dynamic>> _getPromptsForDay(DateTime day) {
-    final normalizedDate = DateTime(day.year, day.month, day.day);
-    final box = Hive.box<Map>('promptsData');
-
-    // Retrieve stored prompts from Hive
-    final storedData = box.get(normalizedDate.toIso8601String());
-    final hivePrompts = storedData?['prompts'];
-
-    // Parse Hive data safely
-    final parsedHivePrompts = hivePrompts != null && hivePrompts is List
-        ? hivePrompts.map((item) => Map<String, dynamic>.from(item)).toList()
-        : <Map<String, dynamic>>[];
-
-    // Calculate prompts from widget data
-    final widgetPrompts = widget.prompts.where((prompt) {
-      final numberOfDaysStr = prompt['numberOfDays'];
-      if (numberOfDaysStr == null) return false;
-
-      final numberOfDays = int.tryParse(numberOfDaysStr);
-      if (numberOfDays == null) return false;
-
+  List<CounselingQuestion> _getPromptsForDay(DateTime day) {
+    return widget.prompts.where((prompt) {
+      final numberOfDays = prompt.numberOfDays;
       final activityStart = widget.StartDate;
       final activityEnd = activityStart.add(Duration(days: numberOfDays - 1));
 
       final normalizedDay = DateTime(day.year, day.month, day.day);
-      return normalizedDay.isAfter(activityStart.subtract(const Duration(days: 1))) &&
-          normalizedDay.isBefore(activityEnd.add(const Duration(days: 1)));
+      final normalizedStart = DateTime(activityStart.year, activityStart.month, activityStart.day);
+      final normalizedEnd = DateTime(activityEnd.year, activityEnd.month, activityEnd.day);
+
+      return normalizedDay.isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
+          normalizedDay.isBefore(normalizedEnd.add(const Duration(days: 1)));
     }).toList();
-
-    // Merge prompts while avoiding duplicates
-    final mergedPrompts = <Map<String, dynamic>>[
-      ...parsedHivePrompts,
-      ...widgetPrompts.where((newPrompt) =>
-      !parsedHivePrompts.any((existing) => existing['prompt'] == newPrompt['prompt']))
-    ];
-
-    // Save merged data back to Hive only if it has changed
-    if (mergedPrompts.length != parsedHivePrompts.length) {
-      final updatedData = {'prompts': mergedPrompts};
-      box.put(normalizedDate.toIso8601String(), updatedData);
-    }
-
-    return mergedPrompts;
   }
 
-// Get medications for the specific day
-  List<Map<String, dynamic>> _getMedicationsForDay(DateTime day) {
-    final normalizedDate = DateTime(day.year, day.month, day.day);
-    final box = Hive.box<Map>('medicationsData');
-
-    // Retrieve stored medications from Hive
-    final storedData = box.get(normalizedDate.toIso8601String());
-    final hiveMedications = storedData?['medications'];
-
-    // Parse Hive data safely
-    final parsedHiveMedications = hiveMedications != null && hiveMedications is List
-        ? hiveMedications.map((item) => Map<String, dynamic>.from(item)).toList()
-        : <Map<String, dynamic>>[];
-
-    // Parse widget medications
-    final widgetMedications = widget.medications.where((medication) {
-      // FIX: Support both old and new field names
-      final numDaysStr = medication['numberOfDays'] ?? medication['numDays'];
-      final numDays = int.tryParse(numDaysStr ?? '') ?? 0;
-
-      // Prevent crashes if numDays is missing
+  List<Medication> _getMedicationsForDay(DateTime day) {
+    return widget.medications.where((medication) {
+      final numDays = medication.numDays;
       if (numDays == 0) return false;
 
-      final medicationStartDay = widget.StartDate.add(Duration(days: -1));
-      final lastMedicationDay =
-      widget.StartDate.add(Duration(days: numDays - 1));
+      final medicationStartDay = widget.StartDate;
+      final lastMedicationDay = medicationStartDay.add(Duration(days: numDays - 1));
 
-      return day.isAfter(medicationStartDay.subtract(const Duration(days: 1))) &&
-          day.isBefore(lastMedicationDay.add(const Duration(days: 1)));
+      final normalizedDay = DateTime(day.year, day.month, day.day);
+      final normalizedStart = DateTime(medicationStartDay.year, medicationStartDay.month, medicationStartDay.day);
+      final normalizedEnd = DateTime(lastMedicationDay.year, lastMedicationDay.month, lastMedicationDay.day);
+
+      return normalizedDay.isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
+          normalizedDay.isBefore(normalizedEnd.add(const Duration(days: 1)));
     }).toList();
-
-    // Merge medications while avoiding duplicates
-    final mergedMedications = <Map<String, dynamic>>[
-      ...parsedHiveMedications,
-      ...widgetMedications.where((newMedication) =>
-      !parsedHiveMedications.any(
-              (existing) => existing['medication'] == newMedication['medication']))
-    ];
-
-    // Save merged data back to Hive only if it has changed
-    if (mergedMedications.length != parsedHiveMedications.length) {
-      final updatedData = {'medications': mergedMedications};
-      box.put(normalizedDate.toIso8601String(), updatedData);
-    }
-
-    return mergedMedications;
   }
 
-
-// Check Bluetooth connection status and discover services
   void _checkBluetoothConnection() async {
-// Get the connected devices
-    List<BluetoothDevice> connectedDevices =
-        await FlutterBluePlus.connectedDevices;
-
+    List<BluetoothDevice> connectedDevices = await FlutterBluePlus.connectedDevices;
     if (connectedDevices.isNotEmpty) {
       setState(() {
-        isBluetoothConnected = true; // Mark as connected if any devices found
+        isBluetoothConnected = true; 
       });
-
-// Discover services and subscribe to the file characteristic
       await _discoverServices(connectedDevices.first);
     } else {
       setState(() {
-        isBluetoothConnected = false; // No connected devices
+        isBluetoothConnected = false; 
       });
     }
   }
 
-  Future<void> _saveRecoveryProgress(DateTime date, List<String> progress) async {
+  Future<void> _saveRecoveryProgress(DateTime date, List<Map<String, dynamic>> progress) async {
     final box = Hive.box<Map>('calendarData');
     final formattedDate = DateTime(date.year, date.month, date.day).toIso8601String();
-
-    // Ensure only unique entries are saved
     final uniqueProgress = progress.toSet().toList();
-
     box.put(formattedDate, {'progress': uniqueProgress});
-    print("Saved Recovery Progress for $formattedDate: ${uniqueProgress.length} items");
-  }
-
-
-  List<String> _retrieveRecoveryProgress(DateTime date) {
-    final box = Hive.box<Map>('calendarData');
-    final formattedDate =
-        DateTime(date.year, date.month, date.day).toIso8601String();
-    final data = box.get(formattedDate);
-    return data != null && data['progress'] != null
-        ? List<String>.from(data['progress'])
-        : [];
   }
 
   void _loadRecoveryProgress() {
     final box = Hive.box<Map>('calendarData');
     final keys = box.keys;
-
     for (final key in keys) {
       final data = box.get(key);
       if (data != null && data['progress'] != null) {
         final date = DateTime.parse(key as String);
-        recoveryProgress[date] = List<String>.from(data['progress']);
+        recoveryProgress[date] = List<Map<String, dynamic>>.from(data['progress']);
       }
     }
   }
 
-// Discover services and set up the characteristic for file reception
   Future<void> _discoverServices(BluetoothDevice device) async {
     List<BluetoothService> services = await device.discoverServices();
     for (var service in services) {
       for (var characteristic in service.characteristics) {
         if (characteristic.properties.notify) {
-// Subscribe to notifications for this characteristic
           await characteristic.setNotifyValue(true);
           characteristic.lastValueStream.listen((data) {
             _handleFileData(data);
           });
-
-// Store the characteristic for later use
           setState(() {
             fileCharacteristic = characteristic;
           });
@@ -281,85 +177,57 @@ class CalendarWidgetState extends State<CalendarWidget> {
 
   void _handleFileData(List<int> data) {
     setState(() {
-// Decode and append received data
       String chunk = utf8.decode(data);
       fileContent += chunk;
-
-// Parse the updated file content into recovery progress
       _parseProgressData(fileContent);
-
-// Optionally log the received chunk
-      print("Received chunk: ${utf8.decode(data)}");
-
-// Write the updated content to a writable file
       _writeRecoveryDataFile(fileContent);
     });
   }
 
   void _parseProgressData(String progressData) {
-    List<String> lines = progressData.split('\n');
+    final lines = progressData.split('\n');
     DateTime? currentDate;
-
-    for (String line in lines) {
-      line = line.trim();
-
+    for (String rawLine in lines) {
+      final line = rawLine.trim();
       if (line.startsWith("Date:")) {
         final dateString = line.substring(5).trim();
         try {
           currentDate = DateTime.parse(dateString);
-        } catch (e) {
+        } catch (_) {
           currentDate = null;
-          print("Invalid Date Format: $dateString");
         }
-      } else if (currentDate != null && line.isNotEmpty) {
-        final normalizedDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
-
-        // Retrieve existing recovery progress for the day
-        final existingProgress = recoveryProgress[normalizedDate] ?? [];
-
-        // Add the new line only if it doesn't already exist
-        if (!existingProgress.contains(line)) {
-          recoveryProgress.putIfAbsent(normalizedDate, () => []).add(line);
-
-          // Save the updated progress to Hive
+        continue;
+      }
+      if (currentDate == null || line.isEmpty) continue;
+      final normalizedDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
+      final existing = recoveryProgress[normalizedDate] ?? [];
+      Map<String, dynamic>? parsedEntry;
+      if (line.startsWith("Medication Taken:")) {
+        final time = line.replaceFirst("Medication Taken:", "").trim();
+        parsedEntry = {"type": "medication", "time": time};
+      } else if (line.startsWith("Prompt:")) {
+        final withoutPrefix = line.replaceFirst("Prompt:", "").trim();
+        final parts = withoutPrefix.split("Response:");
+        final question = parts[0].trim();
+        final response = parts.length > 1 ? parts[1].trim() : "";
+        parsedEntry = {"type": "prompt", "question": question, "response": response};
+      }
+      if (parsedEntry != null) {
+        if (!existing.any((e) => mapEquals(e, parsedEntry))) {
+          recoveryProgress.putIfAbsent(normalizedDate, () => []).add(parsedEntry);
           _saveRecoveryProgress(normalizedDate, recoveryProgress[normalizedDate]!);
         }
       }
     }
-
-    print("Parsed Recovery Progress: $recoveryProgress");
   }
 
-
-  List<String> _getRecoveryProgressForDay(DateTime day) {
-    // Normalize the date
+  List<Map<String, dynamic>> _getRecoveryProgressForDay(DateTime day) {
     final normalizedDate = DateTime(day.year, day.month, day.day);
-
-    // Step 1: Check in-memory data
     if (recoveryProgress.containsKey(normalizedDate)) {
-      return recoveryProgress[normalizedDate]!.toSet().toList(); // Return unique entries
+      return recoveryProgress[normalizedDate]!.toSet().toList(); 
     }
-
-    // Step 2: Retrieve from Hive if not in memory
-    try {
-      final box = Hive.box<Map>('calendarData');
-      final formattedDate = normalizedDate.toIso8601String();
-      final data = box.get(formattedDate);
-
-      if (data != null && data['progress'] != null) {
-        final retrievedProgress = List<String>.from(data['progress']);
-        recoveryProgress[normalizedDate] = retrievedProgress.toSet().toList(); // Cache unique entries
-        return recoveryProgress[normalizedDate]!;
-      }
-    } catch (e) {
-      print("Error retrieving recovery progress from Hive: $e");
-    }
-
-    // Step 3: Return empty list if no data is found
     return [];
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -374,7 +242,6 @@ class CalendarWidgetState extends State<CalendarWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- Navigation Buttons (responsive with Wrap) ---
               Wrap(
                 spacing: 2,
                 runSpacing: 10,
@@ -390,34 +257,47 @@ class CalendarWidgetState extends State<CalendarWidget> {
                   ),
                   ElevatedButton(
                     onPressed: () {
+                      ProviderCubit? cubit;
+                      try {
+                        cubit = context.read<ProviderCubit>();
+                      } catch (_) {}
+
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const EnterPrescriptionData()),
+                        MaterialPageRoute(
+                          builder: (_) => cubit != null
+                              ? BlocProvider.value(value: cubit, child: const EnterPrescriptionData())
+                              : const EnterPrescriptionData(),
+                        ),
                       );
                     },
                     child: const Text('Medications'),
                   ),
                   ElevatedButton(
                     onPressed: () {
+                      ProviderCubit? cubit;
+                      try {
+                        cubit = context.read<ProviderCubit>();
+                      } catch (_) {}
+
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => EnterCounselingPrompts(medications: []),
+                          builder: (context) => cubit != null
+                              ? BlocProvider.value(value: cubit, child: const EnterCounselingPrompts(medications: <Medication>[]))
+                              : const EnterCounselingPrompts(medications: <Medication>[]),
                         ),
                       );
                     },
                     child: const Text(
                       'Counseling',
-                      textAlign: TextAlign.center, // allow wrapping
+                      textAlign: TextAlign.center, 
                       softWrap: true,
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
-
-              // --- Calendar widget ---
               TableCalendar(
                 firstDay: DateTime(2020, 01, 01),
                 lastDay: DateTime(2050, 12, 31),
@@ -433,9 +313,13 @@ class CalendarWidgetState extends State<CalendarWidget> {
                 availableCalendarFormats: const {CalendarFormat.month: 'Month'},
                 calendarBuilders: CalendarBuilders(
                   todayBuilder: (context, day, focusedDay) {
+                    final normalizedDate = DateTime(day.year, day.month, day.day);
+                    final hasRecovery = recoveryProgress[normalizedDate]?.isNotEmpty ?? false;
                     return Container(
                       decoration: BoxDecoration(
-                        color: ColorsManager.mainBlue.withOpacity(0.5),
+                        color: hasRecovery
+                            ? ColorsManager.mainGreen.withValues(alpha: 0.5)
+                            : ColorsManager.mainBlue.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -451,11 +335,10 @@ class CalendarWidgetState extends State<CalendarWidget> {
                     final isFutureDate = normalizedDate.isAfter(DateTime.now());
                     final promptsForDay = _getPromptsForDay(normalizedDate);
                     final medicationsForDay = _getMedicationsForDay(normalizedDate);
-
                     if (isFutureDate && (promptsForDay.isNotEmpty || medicationsForDay.isNotEmpty)) {
                       return Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.purple.withOpacity(0.8), width: 2.0),
+                          border: Border.all(color: Colors.purple.withValues(alpha: 0.8), width: 2.0),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -466,11 +349,10 @@ class CalendarWidgetState extends State<CalendarWidget> {
                         ),
                       );
                     }
-
                     if (recoveryProgress[normalizedDate]?.isNotEmpty ?? false) {
                       return Container(
                         decoration: BoxDecoration(
-                          color: ColorsManager.mainGreen.withOpacity(0.5),
+                          color: ColorsManager.mainGreen.withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -481,13 +363,16 @@ class CalendarWidgetState extends State<CalendarWidget> {
                         ),
                       );
                     }
-
                     return null;
                   },
                   selectedBuilder: (context, day, focusedDay) {
+                    final normalizedDate = DateTime(day.year, day.month, day.day);
+                    final hasRecovery = recoveryProgress[normalizedDate]?.isNotEmpty ?? false;
                     return Container(
                       decoration: BoxDecoration(
-                        color: ColorsManager.mainBlue,
+                        color: hasRecovery
+                            ? ColorsManager.mainGreen   
+                            : ColorsManager.mainBlue,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -500,10 +385,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
                   },
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // --- Recovery Progress Section ---
               if (recoveryProgressForDay.isNotEmpty) ...[
                 Center(
                   child: Text(
@@ -522,12 +404,12 @@ class CalendarWidgetState extends State<CalendarWidget> {
                         width: (MediaQuery.of(context).size.width - 40) / 3,
                         padding: const EdgeInsets.all(8.0),
                         decoration: BoxDecoration(
-                          color: ColorsManager.mainBlue.withOpacity(0.2),
+                          color: ColorsManager.mainBlue.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8.0),
                         ),
                         child: Center(
                           child: Text(
-                            progress,
+                            _formatProgressEntry(progress),
                             style: TextStyle(fontSize: 14.sp),
                             textAlign: TextAlign.center,
                           ),
@@ -538,8 +420,6 @@ class CalendarWidgetState extends State<CalendarWidget> {
                 ),
                 const SizedBox(height: 20),
               ],
-
-              // --- Prompts Section ---
               if (promptsForDay.isNotEmpty) ...[
                 Center(
                   child: Text(
@@ -560,12 +440,12 @@ class CalendarWidgetState extends State<CalendarWidget> {
                           width: (MediaQuery.of(context).size.width - 40) / 3,
                           padding: const EdgeInsets.all(8.0),
                           decoration: BoxDecoration(
-                            color: ColorsManager.mainBlue.withOpacity(0.2),
+                            color: ColorsManager.mainBlue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8.0),
                           ),
                           child: Center(
                             child: Text(
-                              prompt['prompt']!,
+                              prompt.prompt,
                               style: TextStyle(fontSize: 14.sp),
                               textAlign: TextAlign.center,
                             ),
@@ -577,8 +457,6 @@ class CalendarWidgetState extends State<CalendarWidget> {
                 ),
                 const SizedBox(height: 20),
               ],
-
-              // --- Medications Section ---
               if (medicationsForDay.isNotEmpty) ...[
                 Center(
                   child: Text(
@@ -599,12 +477,12 @@ class CalendarWidgetState extends State<CalendarWidget> {
                           width: (MediaQuery.of(context).size.width - 40) / 3,
                           padding: const EdgeInsets.all(8.0),
                           decoration: BoxDecoration(
-                            color: ColorsManager.mainBlue.withOpacity(0.2),
+                            color: ColorsManager.mainBlue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8.0),
                           ),
                           child: Center(
                             child: Text(
-                              medication['medication'] ?? "Unknown",
+                              medication.name,
                               style: TextStyle(fontSize: 14.sp),
                               textAlign: TextAlign.center,
                             ),
@@ -622,47 +500,31 @@ class CalendarWidgetState extends State<CalendarWidget> {
     );
   }
 
-// Show progress details in a dialog, including options
-  void _showProgressDetails(BuildContext context, fileContent) {
+  void _showPromptDetails(BuildContext context, CounselingQuestion prompt) {
+    final rawOptions = prompt.options;
+    String options;
+    if (rawOptions is List<Map<String, dynamic>>) {
+      options = rawOptions.map((e) => e.toString()).join(', ');
+    } else if (rawOptions is List<String>) {
+      options = rawOptions.join(', ');
+    } else if (rawOptions is List) {
+      options = rawOptions.map((e) => e.toString()).join(', ');
+    } else {
+      options = 'No options';
+    }
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text("Recovery Progress"),
-          content: Text(fileContent),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("Close"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-// Show prompt details in a dialog, including options
-  void _showPromptDetails(BuildContext context, Map<String, dynamic> prompt) {
-    final options = prompt['options'] != null
-        ? (prompt['options'] as List<String>).join(', ')
-        : 'No options';
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(prompt['prompt']!),
+          title: Text(prompt.prompt),
           content: Text(
-            "Required Response: ${prompt['resReq']}\n"
-            "Response Options: $options\n"
-            "Duration: ${prompt['numberOfDays']} day(s)",
+            "Required Response: ${prompt.resReq}\n"
+                "Response Options: $options\n"
+                "Duration: ${prompt.numberOfDays} day(s)",
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text("Close"),
             ),
           ],
@@ -671,19 +533,18 @@ class CalendarWidgetState extends State<CalendarWidget> {
     );
   }
 
-// Show medication details in a dialog
   void _showMedicationDetails(
-      BuildContext context, Map<String, dynamic> medication) {
+      BuildContext context, Medication medication) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(medication['medication']!),
+          title: Text(medication.name),
           content: Text(
-            "Frequency: ${medication['frequency']}\n"
-            "Dose: ${medication['dose']}\n"
-            "Times: ${medication['times']}\n"
-            "Duration: ${medication['numDays']} day(s)",
+            "Frequency: ${medication.frequency}\n"
+            "Dose: ${medication.dose}\n"
+            "Times: ${medication.times}\n"
+            "Duration: ${medication.numDays} day(s)",
           ),
           actions: [
             TextButton(
@@ -700,8 +561,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
 }
 
 Future<File> _getRecoveryDataFile() async {
-  final directory =
-      await getApplicationDocumentsDirectory(); // Or getTemporaryDirectory()
+  final directory = await getApplicationDocumentsDirectory(); 
   return File('${directory.path}/recovery_data.txt');
 }
 
@@ -709,41 +569,7 @@ Future<void> _writeRecoveryDataFile(String content) async {
   try {
     final file = await _getRecoveryDataFile();
     await file.writeAsString(content);
-    print("File written successfully at ${file.path}");
   } catch (e) {
     print("Error writing file: $e");
   }
 }
-
-Future<String> _readRecoveryDataFile() async {
-  try {
-    final file = await _getRecoveryDataFile();
-    if (await file.exists()) {
-      return await file.readAsString();
-    } else {
-      print("File does not exist");
-      return '';
-    }
-  } catch (e) {
-    print("Error reading file: $e");
-    return '';
-  }
-}
-
-Future<void> _deleteRecoveryDataFile() async {
-  try {
-    final file = await _getRecoveryDataFile();
-    if (await file.exists()) {
-      await file.delete();
-      print("File deleted successfully");
-    } else {
-      print("File does not exist, nothing to delete");
-    }
-  } catch (e) {
-    print("Error deleting file: $e");
-  }
-}
-
-
-
-

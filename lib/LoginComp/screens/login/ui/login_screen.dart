@@ -5,8 +5,10 @@ import 'package:flutter_offline/flutter_offline.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // For saving user type
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../models/medication.dart';
+import '../../../../models/counseling_question.dart';
 import '../../../core/widgets/login_and_signup_animated_form.dart';
 import '../../../core/widgets/no_internet.dart';
 import '../../../core/widgets/progress_indicaror.dart';
@@ -28,8 +30,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _clinicCodeController = TextEditingController();
-  String _userType = 'User';  // Default is User
-  bool _showClinicCodeField = false;  // Controls whether the clinic code input appears
+  String _userType = 'User';
+  bool _showClinicCodeField = false;
 
   @override
   void initState() {
@@ -97,6 +99,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   context.pushNamedAndRemoveUntil(
                     Routes.homeScreen,
                     predicate: (route) => false,
+                    arguments: {
+                      'prompts': const <CounselingQuestion>[],
+                      'medications': const <Medication>[],
+                    },
                   );
                 }
               } else if (state is UserNotVerified) {
@@ -137,17 +143,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   Gap(10.h),
-
-                  // Node Logo
                   SvgPicture.asset(
-                    'assets/images/NodeLogo.png', // Replace with your Node logo
+                    'assets/images/NodeLogo.png',
                     height: 100.h,
                     width: 200.w,
                   ),
-
                   Gap(10.h),
-
-                  // Add user type dropdown
                   DropdownButtonFormField<String>(
                     value: _userType,
                     onChanged: (String? newValue) {
@@ -177,8 +178,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   Gap(10.h),
-
-                  // Show clinic access code field only if 'Provider' is selected
                   if (_showClinicCodeField)
                     TextField(
                       controller: _clinicCodeController,
@@ -196,9 +195,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
                   Gap(10.h),
-                  EmailAndPassword(),  // Existing email and password fields
+                  EmailAndPassword(),
                   Gap(10.h),
                   const SigninWithGoogleText(),
                   Gap(5.h),
@@ -225,7 +223,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Save the user role (user or provider) and clinic code to SharedPreferences
   Future<void> _saveUserRole(String userType, String clinicCode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userType', userType);
