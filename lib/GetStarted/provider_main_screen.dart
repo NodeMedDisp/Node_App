@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../HomePage/calendar_widg.dart';
 import '../LoginComp/logic/provider/provider_cubit.dart';
 import '../LoginComp/logic/provider/provider_state.dart';
 import '../LoginComp/routing/routes.dart';
+import '../Bluetooth/bluetooth_trial.dart';
+import 'enter_medication_data.dart';
+import 'enter_counseling_data.dart';
 
 class ProviderMainScreen extends StatefulWidget {
   final String? clinicCode;
@@ -17,7 +21,7 @@ class ProviderMainScreen extends StatefulWidget {
 }
 
 class _ProviderMainScreenState extends State<ProviderMainScreen> {
-  final GlobalKey<CalendarWidgetState> _calendarKey = GlobalKey();
+  final GlobalKey<CalendarWidgetState> _calendarKey = GlobalKey<CalendarWidgetState>();
 
   @override
   void initState() {
@@ -25,14 +29,75 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
     context.read<ProviderCubit>().loadClinicData(widget.clinicCode);
   }
 
+  void _showBluetoothDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Bluetooth Connection'),
+          content: const Text('Pair a device to configure or view data.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _navigateToScanner();
+              },
+              child: const Text('Pair Device'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _navigateToScanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const BLEScannerWidget()),
+    ).then((_) {
+      _calendarKey.currentState?.checkBluetoothConnection();
+      setState(() {}); 
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           "Provider Dashboard",
-          style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bluetooth),
+            color: _calendarKey.currentState?.isBluetoothConnected == true
+                ? Colors.blue
+                : Colors.grey,
+            onPressed: () async {
+              List<BluetoothDevice> connectedDevices = await FlutterBluePlus.connectedDevices;
+              if (connectedDevices.isEmpty) {
+                _showBluetoothDialog();
+              } else {
+                _navigateToScanner();
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                Routes.loginScreen,
+                (route) => false,
+              );
+            },
+          ),
+        ],
       ),
       body: Row(
         children: [
@@ -88,61 +153,91 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
           // RIGHT SIDE — CALENDAR
           Expanded(
             flex: 6,
-            child: BlocBuilder<ProviderCubit, ProviderState>(
-              builder: (context, state) {
-                final selectedUser = state.selectedUser;
+            child: Padding(
+              padding: EdgeInsets.all(16.w),
+              child: BlocBuilder<ProviderCubit, ProviderState>(
+                builder: (context, state) {
+                  final selectedUser = state.selectedUser;
 
-                if (selectedUser == null) {
-                  return const Center(
-                    child: Text("Select a user to view their recovery calendar."),
-                  );
-                }
+                  if (selectedUser == null) {
+                    return const Center(
+                      child: Text("Select a user to view their recovery calendar."),
+                    );
+                  }
 
-                // FORCE REFRESH: Key ensures CalendarWidget state is reset when user changes
-                final keyString = 'provider_${selectedUser.id}_${state.demoMedications.length}_${state.demoPrompts.length}';
-
-                return Column(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.all(16.w),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Patient Header
+                      Text(
+                        "Viewing: ${selectedUser.displayName}",
+                        style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 12.h),
+                      
+                      // Uniform Action Buttons below header
+                      Row(
                         children: [
-                          Text(
-                            "Viewing: ${selectedUser.displayName}",
-                            style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.medication),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => BlocProvider.value(
+                                      value: context.read<ProviderCubit>(),
+                                      child: const EnterPrescriptionData(),
+                                    ),
+                                  ),
+                                );
+                              },
+                              label: const Text("Add Medication"),
+                              style: ElevatedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: 12.h),
+                              ),
+                            ),
                           ),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              // FORCE CUBIT SOURCE: Pull arguments directly from state at click time
-                              final currentState = context.read<ProviderCubit>().state;
-                              Navigator.pushNamed(
-                                context,
-                                Routes.homeScreen,
-                                arguments: {
-                                  'medications': currentState.demoMedications,
-                                  'prompts': currentState.demoPrompts,
-                                },
-                              );
-                            },
-                            icon: const Icon(Icons.open_in_new),
-                            label: const Text("View Patient App"),
+                          SizedBox(width: 12.w),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.question_answer),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => BlocProvider.value(
+                                      value: context.read<ProviderCubit>(),
+                                      child: EnterCounselingPrompts(
+                                        medications: state.demoMedications,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                              label: const Text("Add Prompt"),
+                              style: ElevatedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: 12.h),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    Expanded(
-                      child: CalendarWidget(
-                        key: ValueKey(keyString),
-                        prompts: state.demoPrompts,
-                        medications: state.demoMedications,
-                        StartDate: selectedUser.startDate ?? DateTime.now(),
-                        externalFocusDay: selectedUser.latestEntryDate,
+                      
+                      SizedBox(height: 16.h),
+                      Expanded(
+                        child: CalendarWidget(
+                          key: _calendarKey,
+                          prompts: state.demoPrompts,
+                          medications: state.demoMedications,
+                          StartDate: selectedUser.startDate ?? DateTime.now(),
+                          externalFocusDay: selectedUser.latestEntryDate,
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],

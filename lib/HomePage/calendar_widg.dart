@@ -83,7 +83,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
       };
     }
 
-    _checkBluetoothConnection();
+    checkBluetoothConnection();
   }
 
   void focusOn(DateTime day) {
@@ -125,7 +125,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
     }).toList();
   }
 
-  void _checkBluetoothConnection() async {
+  void checkBluetoothConnection() async {
     List<BluetoothDevice> connectedDevices = await FlutterBluePlus.connectedDevices;
     if (connectedDevices.isNotEmpty) {
       setState(() {
@@ -235,6 +235,11 @@ class CalendarWidgetState extends State<CalendarWidget> {
     final medicationsForDay = _getMedicationsForDay(_selectedDay);
     final recoveryProgressForDay = _getRecoveryProgressForDay(_selectedDay);
 
+    bool isProvider = false;
+    try {
+      isProvider = context.read<ProviderCubit>().state.selectedUser != null;
+    } catch (_) {}
+
     return Scaffold(
       body: SingleChildScrollView(
         child: Padding(
@@ -242,62 +247,64 @@ class CalendarWidgetState extends State<CalendarWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Wrap(
-                spacing: 2,
-                runSpacing: 10,
-                children: [
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const GetStartedPage()),
-                      );
-                    },
-                    child: const Text('Go to Setup'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      ProviderCubit? cubit;
-                      try {
-                        cubit = context.read<ProviderCubit>();
-                      } catch (_) {}
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => cubit != null
-                              ? BlocProvider.value(value: cubit, child: const EnterPrescriptionData())
-                              : const EnterPrescriptionData(),
-                        ),
-                      );
-                    },
-                    child: const Text('Medications'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      ProviderCubit? cubit;
-                      try {
-                        cubit = context.read<ProviderCubit>();
-                      } catch (_) {}
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => cubit != null
-                              ? BlocProvider.value(value: cubit, child: const EnterCounselingPrompts(medications: <Medication>[]))
-                              : const EnterCounselingPrompts(medications: <Medication>[]),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      'Counseling',
-                      textAlign: TextAlign.center, 
-                      softWrap: true,
+              if (!isProvider) ...[
+                Wrap(
+                  spacing: 2,
+                  runSpacing: 10,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const GetStartedPage()),
+                        );
+                      },
+                      child: const Text('Go to Setup'),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () {
+                        ProviderCubit? cubit;
+                        try {
+                          cubit = context.read<ProviderCubit>();
+                        } catch (_) {}
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => cubit != null
+                                ? BlocProvider.value(value: cubit, child: const EnterPrescriptionData())
+                                : const EnterPrescriptionData(),
+                          ),
+                        );
+                      },
+                      child: const Text('Medications'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        ProviderCubit? cubit;
+                        try {
+                          cubit = context.read<ProviderCubit>();
+                        } catch (_) {}
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => cubit != null
+                                ? BlocProvider.value(value: cubit, child: const EnterCounselingPrompts(medications: <Medication>[]))
+                                : const EnterCounselingPrompts(medications: <Medication>[]),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'Counseling',
+                        textAlign: TextAlign.center, 
+                        softWrap: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
               TableCalendar(
                 firstDay: DateTime(2020, 01, 01),
                 lastDay: DateTime(2050, 12, 31),
