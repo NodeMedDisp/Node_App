@@ -55,12 +55,28 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
   }
 
   void _navigateToScanner() {
+    // 1. Capture the Cubit instance and the current medication data
+    final providerCubit = context.read<ProviderCubit>();
+    final medications = providerCubit.state.demoMedications;
+
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const BLEScannerWidget()),
+      MaterialPageRoute(
+        // 2. Use BlocProvider.value to pass the cubit to the scanner screen
+        builder: (context) => BlocProvider.value(
+          value: providerCubit,
+          child: const BLEScannerWidget(),
+        ),
+        // 3. Keep passing the medications as arguments for the configuration flow
+        settings: RouteSettings(
+          arguments: {
+            'medications': medications,
+          },
+        ),
+      ),
     ).then((_) {
       _calendarKey.currentState?.checkBluetoothConnection();
-      setState(() {}); 
+      setState(() {});
     });
   }
 

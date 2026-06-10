@@ -123,7 +123,47 @@ class ProviderCubit extends Cubit<ProviderState> {
     );
   }
 
-  // 2. Isolate 'Add' Logic: Ensure data is added ONLY to the currently selected user's storage
+  /// NEW: Creates a new patient based on data received from a Bluetooth device
+  void importPatientFromDevice({
+    required String deviceName,
+    required List<Map<String, dynamic>> medications,
+  }) {
+    // Create a unique ID and new User object
+    final String newId = "imported_${DateTime.now().millisecondsSinceEpoch}";
+    final newUser = ProviderUser(
+      id: newId,
+      displayName: "Patient ($deviceName)",
+      deviceId: deviceName,
+      startDate: DateTime.now(),
+      latestEntryDate: DateTime.now(),
+    );
+
+    // Convert raw maps from the parser into Medication model objects
+    final List<Medication> medObjects = medications.map((m) {
+      return Medication(
+        name: m['name'] ?? 'Unknown Med',
+        dose: m['dose'] ?? 'Unknown Dose',
+        times: m['times'] ?? '12:00 PM',
+        frequency: m['frequency'] ?? 'Daily',
+        numDays: m['numDays'] ?? 30,
+      );
+    }).toList();
+
+    // Store in our local maps
+    _demoMedicationsByUser[newId] = medObjects;
+    _demoPromptsByUser[newId] = []; // Start with no prompts for imported users
+
+    // Update state with the new user list and select the new user
+    final List<ProviderUser> updatedUsers = List.from(state.users)..add(newUser);
+
+    emit(state.copyWith(
+      users: updatedUsers,
+      selectedUser: newUser,
+      demoMedications: medObjects,
+      demoPrompts: [],
+    ));
+  }
+
   void addMedicationToSelectedUser(Medication med) {
     final user = state.selectedUser;
     if (user == null) return;
