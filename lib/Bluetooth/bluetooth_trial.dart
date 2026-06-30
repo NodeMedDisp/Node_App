@@ -22,7 +22,10 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
   @override
   void initState() {
     super.initState();
-    requestPermissions();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      checkPermissionsThenStartScan();
+    });
   }
 
   /// NEW: Simulates a successful data transfer from a device without using Bluetooth hardware
@@ -66,14 +69,12 @@ Days: 0 to 14
     }
   }
 
-  Future<void> requestPermissions() async {
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
+  Future<void> checkPermissionsThenStartScan() async {
+    final hasPermissions = await requestBluetoothPermissions();
 
-    if (statuses.values.every((status) => status.isGranted)) {
+    if (!mounted) return;
+
+    if (hasPermissions) {
       startScanning();
     } else {
       showPermissionDialog();
@@ -136,14 +137,22 @@ Days: 0 to 14
   }
 
   Future<void> connectToDevice(BluetoothDevice device) async {
+    final hasPermissions = await requestBluetoothPermissions();
+
+    if (!hasPermissions) {
+      showPermissionDialog();
+      return;
+    }
+
     try {
       debugPrint('Connecting to ${device.platformName}');
       await device.connect();
-      if (mounted) {
-        setState(() {
-          connectedDevice = device;
-        });
-      }
+
+      if (!mounted) return;
+
+      setState(() {
+        connectedDevice = device;
+      });
     } catch (e) {
       debugPrint('Error connecting to device: $e');
     }
@@ -265,6 +274,27 @@ Days: 0 to 14
     }
   }
 
+  ///Request Bluetooth
+  Future<bool> requestBluetoothPermissions() async {
+      if (!Platform.isAndroid) {
+        return true;
+      }
+
+      final statuses = await [
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+        Permission.bluetoothAdvertise,
+        Permission.locationWhenInUse,
+      ].request();
+
+      final bluetoothScanGranted =
+          statuses[Permission.bluetoothScan]?.isGranted ?? false;
+      final bluetoothConnectGranted =
+          statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+
+      return bluetoothScanGranted && bluetoothConnectGranted;
+    }
+
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
@@ -373,7 +403,7 @@ Days: 0 to 14
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: isScanning ? stopScanning : startScanning,
+        onPressed: isScanning ? stopScanning : checkPermissionsThenStartScan,
         child: Icon(isScanning ? Icons.stop : Icons.search),
       ),
     );
