@@ -19,6 +19,9 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
   BluetoothDevice? connectedDevice;
   bool isScanning = false;
 
+  StreamSubscription<List<ScanResult>>? scanResultsSubscription;
+  StreamSubscription<bool>? isScanningSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -104,28 +107,66 @@ Days: 0 to 14
     );
   }
 
-  void startScanning() {
-    setState(() {
-      isScanning = true;
-      scanResults.clear();
-    });
+  Future<void> startScanning() async {
+      final adapterState = await FlutterBluePlus.adapterState.first;
 
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      debugPrint("DEBUG: Bluetooth adapter state: $adapterState");
 
-    FlutterBluePlus.scanResults.listen((results) {
-      if (!mounted) return;
-      setState(() {
-        scanResults = results;
+      if (adapterState != BluetoothAdapterState.on) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please turn Bluetooth on.")),
+        );
+        return;
+      }
+
+      await scanResultsSubscription?.cancel();
+      await isScanningSubscription?.cancel();
+
+      scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
+        debugPrint("DEBUG: Scan results count: ${results.length}");
+
+        for (final result in results) {
+          debugPrint(
+            "DEBUG: Found device: "
+            "platformName='${result.device.platformName}', "
+            "advName='${result.advertisementData.advName}', "
+            "remoteId='${result.device.remoteId}', "
+            "rssi='${result.rssi}', "
+            "serviceUuids='${result.advertisementData.serviceUuids}'",
+          );
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          scanResults = results;
+        });
       });
-    });
 
-    FlutterBluePlus.isScanning.listen((scanning) {
-      if (!mounted) return;
-      setState(() {
-        isScanning = scanning;
+      isScanningSubscription = FlutterBluePlus.isScanning.listen((scanning) {
+        if (!mounted) return;
+
+        setState(() {
+          isScanning = scanning;
+        });
       });
-    });
-  }
+
+      if (!mounted) return;
+
+      setState(() {
+        isScanning = true;
+        scanResults.clear();
+      });
+
+      debugPrint("DEBUG: Starting BLE scan...");
+
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(seconds: 30),
+      );
+    }
+  
 
   void stopScanning() {
     FlutterBluePlus.stopScan();
@@ -134,6 +175,14 @@ Days: 0 to 14
         isScanning = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    scanResultsSubscription?.cancel();
+    isScanningSubscription?.cancel();
+    FlutterBluePlus.stopScan();
+    super.dispose();
   }
 
   Future<void> connectToDevice(BluetoothDevice device) async {
@@ -284,7 +333,6 @@ Days: 0 to 14
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
         Permission.bluetoothAdvertise,
-        Permission.locationWhenInUse,
       ].request();
 
       final bluetoothScanGranted =
@@ -409,3 +457,4 @@ Days: 0 to 14
     );
   }
 }
+
