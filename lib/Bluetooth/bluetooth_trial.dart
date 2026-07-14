@@ -161,6 +161,9 @@ Days: 0 to 14
       });
 
       debugPrint("DEBUG: Starting BLE scan...");
+      debugPrint("SCAN: ${await Permission.bluetoothScan.status}");
+      debugPrint("CONNECT: ${await Permission.bluetoothConnect.status}");
+      debugPrint("ADVERTISE: ${await Permission.bluetoothAdvertise.status}");
 
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 30),
@@ -333,14 +336,22 @@ Days: 0 to 14
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
         Permission.bluetoothAdvertise,
+        Permission.locationWhenInUse,
       ].request();
 
       final bluetoothScanGranted =
           statuses[Permission.bluetoothScan]?.isGranted ?? false;
       final bluetoothConnectGranted =
           statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+      final locationGranted =
+          statuses[Permission.locationWhenInUse]?.isGranted ?? false;
 
-      return bluetoothScanGranted && bluetoothConnectGranted;
+      debugPrint("SCAN: ${statuses[Permission.bluetoothScan]}");
+      debugPrint("CONNECT: ${statuses[Permission.bluetoothConnect]}");
+      debugPrint("ADVERTISE: ${statuses[Permission.bluetoothAdvertise]}");
+      debugPrint("LOCATION: ${statuses[Permission.locationWhenInUse]}");
+
+      return bluetoothScanGranted && bluetoothConnectGranted && locationGranted;
     }
 
   @override
