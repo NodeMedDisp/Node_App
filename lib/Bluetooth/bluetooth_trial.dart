@@ -205,6 +205,10 @@ Days: 0 to 14
       setState(() {
         connectedDevice = device;
       });
+
+      debugPrint("DEBUG: Returning connected device to previous screen: ${device.remoteId}");
+      Navigator.pop(context, device);
+      
     } catch (e) {
       debugPrint('Error connecting to device: $e');
     }

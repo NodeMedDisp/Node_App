@@ -68,6 +68,12 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
 
       await file.writeAsString('EOF\n', mode: FileMode.append);
       print('Data saved to file successfully!');
+
+      final savedText = await file.readAsString();
+
+      debugPrint("========== SAVED FILE CONTENTS ==========");
+      debugPrint(savedText);
+      debugPrint("========== END SAVED FILE CONTENTS ==========");
     } catch (e) {
       print('Error saving data to file: $e');
     }
@@ -133,10 +139,14 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
           child: ElevatedButton(
             onPressed: () async {
               await _saveDataToFile();
+              print("SUMMARY DEVICE: ${widget.device?.remoteId}");
+              
               if (widget.device != null) {
+                print("BLE mode: sending file to connected device ${widget.device!.remoteId}");
                 await sendFileToDevice(widget.device!);
               } else {
-                print("Mock mode: skipping BLE transmission");
+                print("ERROR: No BluetoothDevice was passed into RecoverySummaryScreen.");
+                print("BLE transmission skipped because widget.device is null.");
               }
 
               if (!context.mounted) return;

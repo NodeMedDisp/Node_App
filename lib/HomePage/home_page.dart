@@ -28,6 +28,7 @@ class _HomePageState extends State<HomePage> {
   final DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   bool isBluetoothConnected = false; // Track Bluetooth connection status
+  BluetoothDevice? selectedBluetoothDevice;
 
   @override
   void initState() {
@@ -72,20 +73,24 @@ class _HomePageState extends State<HomePage> {
           content: const Text('Pair a device to configure or view data.'),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                Navigator.push(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close the dialog first
+
+                final device = await Navigator.push<BluetoothDevice>(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => BLEScannerWidget(), // Navigate to Bluetooth setup page
+                    builder: (context) => const BLEScannerWidget(),
                   ),
                 );
+
+                if (device != null) {
+                  setState(() {
+                    selectedBluetoothDevice = device;
+                    isBluetoothConnected = true;
+                  });
+
+                  debugPrint("DEBUG: HomePage stored BLE device: ${device.remoteId}");
+                }
               },
               child: const Text('Pair Device'),
             ),
@@ -112,12 +117,21 @@ class _HomePageState extends State<HomePage> {
           actions: [
             IconButton(
               icon: const Icon(Icons.bluetooth),
-              onPressed: () {
+              onPressed: () async{
                 // Navigate to Bluetooth setup page when the icon is clicked
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => BLEScannerWidget()),
-                );
+                final device = await Navigator.push<BluetoothDevice>(
+                context,
+                MaterialPageRoute(builder: (context) => const BLEScannerWidget()),
+              );
+
+              if (device != null) {
+                setState(() {
+                  selectedBluetoothDevice = device;
+                  isBluetoothConnected = true;
+                });
+
+                debugPrint("DEBUG: HomePage stored BLE device: ${device.remoteId}");
+              }
               },
             ),
             IconButton(
@@ -155,18 +169,16 @@ class _HomePageState extends State<HomePage> {
                 SizedBox(height: 20.h),
                 ElevatedButton(
                   onPressed: () async {
-                    final connectedDevices = await FlutterBluePlus.connectedSystemDevices;
-
-                    if (connectedDevices.isNotEmpty) {
+                    if (selectedBluetoothDevice != null) {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => GetStartedPage(device: connectedDevices.first),
+                          builder: (_) => GetStartedPage(device: selectedBluetoothDevice),
                         ),
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('No Bluetooth device found')),
+                        const SnackBar(content: Text('No Bluetooth device selected. Please pair a device first.')),
                       );
                     }
                   },
