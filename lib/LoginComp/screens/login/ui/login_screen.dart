@@ -44,12 +44,12 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: OfflineBuilder(
         connectivityBuilder: (
-            BuildContext context,
-            List<ConnectivityResult> connectivity,
-            Widget child,
-            ) {
+          BuildContext context,
+          List<ConnectivityResult> connectivity,
+          Widget child,
+        ) {
           final bool connected = connectivity.any(
-                (result) => result != ConnectivityResult.none,
+            (result) => result != ConnectivityResult.none,
           );
           return connected ? _loginPage(context) : const BuildNoInternet();
         },
@@ -65,7 +65,8 @@ class _LoginScreenState extends State<LoginScreen> {
   SafeArea _loginPage(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
+        padding:
+            EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
         child: SingleChildScrollView(
           child: BlocConsumer<AuthCubit, AuthState>(
             buildWhen: (previous, current) => previous != current,
@@ -143,10 +144,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   Gap(10.h),
-                  SvgPicture.asset(
+                  Image.asset(
                     'assets/images/NodeLogo.png',
                     height: 100.h,
                     width: 200.w,
+                    fit: BoxFit.contain,
                   ),
                   Gap(10.h),
                   DropdownButtonFormField<String>(
@@ -157,7 +159,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         _showClinicCodeField = _userType == 'Provider';
                       });
                     },
-                    items: <String>['User', 'Provider'].map<DropdownMenuItem<String>>((String value) {
+                    items: <String>['User', 'Provider']
+                        .map<DropdownMenuItem<String>>((String value) {
                       return DropdownMenuItem<String>(
                         value: value,
                         child: Text(value),
@@ -173,7 +176,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderSide: BorderSide(color: Colors.black, width: 1.5),
                       ),
                       focusedBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                        borderSide: BorderSide(
+                            color: ColorsManager.mainBlue, width: 2.0),
                       ),
                     ),
                   ),
@@ -188,10 +192,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderSide: BorderSide(color: Colors.grey[400]!),
                         ),
                         enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.black, width: 1.5),
+                          borderSide:
+                              BorderSide(color: Colors.black, width: 1.5),
                         ),
                         focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                          borderSide: BorderSide(
+                              color: ColorsManager.mainBlue, width: 2.0),
                         ),
                       ),
                     ),
