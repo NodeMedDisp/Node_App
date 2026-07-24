@@ -49,7 +49,8 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
       );
     } on MissingPluginException catch (e) {
       // Plugin not registered for this platform — skip gracefully
-      print('MissingPluginException while saving response: $e — skipping file write.');
+      print(
+          'MissingPluginException while saving response: $e — skipping file write.');
       return;
     } on PlatformException catch (e) {
       // Platform channel error — log and continue
@@ -69,6 +70,9 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
     await _saveResponseToFile(_selectedOption!);
 
     if (_selectedOption == 'Yes') {
+      debugPrint(
+        'TRACE 4 COUNSELING CHOICE -> NEXT: ${widget.device?.remoteId}',
+      );
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -101,7 +105,8 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
               style: TextStyle(fontSize: 18.sp),
             ),
             SizedBox(height: 20.h),
-            _buildOptionButton("Yes, the counselor will enter daily prompts.", "Yes"),
+            _buildOptionButton(
+                "Yes, the counselor will enter daily prompts.", "Yes"),
             SizedBox(height: 20.h),
             _buildOptionButton(
                 "No, the patient does not have a mental health counseling plan",

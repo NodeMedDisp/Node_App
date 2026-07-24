@@ -42,6 +42,9 @@ class _GetStartedPageState extends State<GetStartedPage> {
     _triggerRiveJumpAnimation();
 
     Future.delayed(const Duration(milliseconds: 1000), () {
+      debugPrint(
+        'TRACE 2 GET STARTED -> PRESCRIPTION: ${widget.device?.remoteId}',
+      );
       Navigator.push(
         context,
         MaterialPageRoute(

@@ -5,15 +5,16 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../LoginComp/logic/provider/provider_cubit.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart'; 
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../models/medication.dart';
 import '../models/counseling_question.dart';
 
 class EnterCounselingPrompts extends StatefulWidget {
   final List<Medication> medications;
-  final BluetoothDevice? device; 
+  final BluetoothDevice? device;
 
-  const EnterCounselingPrompts({super.key, required this.medications, this.device});
+  const EnterCounselingPrompts(
+      {super.key, required this.medications, this.device});
 
   @override
   _EnterCounselingPrompts createState() => _EnterCounselingPrompts();
@@ -23,10 +24,10 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
   final TextEditingController _promptController = TextEditingController();
   final TextEditingController _daysController = TextEditingController();
 
-  String _responseRequired = 'Require a Response?'; 
-  String? _responseType; 
-  List<CounselingQuestion> prompts = []; 
-  String? _errorMessage; 
+  String _responseRequired = 'Require a Response?';
+  String? _responseType;
+  List<CounselingQuestion> prompts = [];
+  String? _errorMessage;
 
   void _addPrompt() {
     List<String> options = [];
@@ -34,17 +35,18 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
     if (_responseRequired == 'Yes') {
       if (_responseType == null) {
         setState(() {
-          _errorMessage = 'Please select a response type (Yes/No or 1-10 Scale).';
+          _errorMessage =
+              'Please select a response type (Yes/No or 1-10 Scale).';
         });
         return;
       }
       if (_responseType == 'Yes/No') {
         options = ['Yes', 'No'];
       } else if (_responseType == '1-10 Scale') {
-        options = List.generate(10, (index) => (index + 1).toString()); 
+        options = List.generate(10, (index) => (index + 1).toString());
       }
     } else {
-      options = ['Respond in Journal']; 
+      options = ['Respond in Journal'];
     }
 
     final newPrompt = CounselingQuestion(
@@ -72,7 +74,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
       _daysController.clear();
       _responseRequired = 'Require a Response?';
       _responseType = null;
-      _errorMessage = null; 
+      _errorMessage = null;
     });
   }
 
@@ -85,7 +87,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Enter Counseling Prompts")),
-      resizeToAvoidBottomInset: true, 
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -96,12 +98,14 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                 decoration: InputDecoration(
                   labelText: "Enter Prompt Here",
                   labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey[400]!)),
+                  border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.grey[400]!)),
                   enabledBorder: const OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.black, width: 1.5),
                   ),
                   focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                    borderSide:
+                        BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                   ),
                 ),
               ),
@@ -111,8 +115,10 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       value: _responseRequired,
-                      items: ['Require a Response?', 'Yes', 'Journal Response'].map((resReq) {
-                        return DropdownMenuItem<String>(value: resReq, child: Text(resReq));
+                      items: ['Require a Response?', 'Yes', 'Journal Response']
+                          .map((resReq) {
+                        return DropdownMenuItem<String>(
+                            value: resReq, child: Text(resReq));
                       }).toList(),
                       onChanged: (value) {
                         setState(() {
@@ -123,12 +129,15 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                         });
                       },
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey[400]!)),
+                        border: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey[400]!)),
                         enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.black, width: 1.5),
+                          borderSide:
+                              BorderSide(color: Colors.black, width: 1.5),
                         ),
                         focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                          borderSide: BorderSide(
+                              color: ColorsManager.mainBlue, width: 2.0),
                         ),
                       ),
                     ),
@@ -148,7 +157,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   onChanged: (value) {
                     setState(() {
                       _responseType = value;
-                      _errorMessage = null; 
+                      _errorMessage = null;
                     });
                   },
                 ),
@@ -159,7 +168,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   onChanged: (value) {
                     setState(() {
                       _responseType = value;
-                      _errorMessage = null; 
+                      _errorMessage = null;
                     });
                   },
                 ),
@@ -179,12 +188,14 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                 decoration: InputDecoration(
                   labelText: "Number of Days",
                   labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey[400]!)),
+                  border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.grey[400]!)),
                   enabledBorder: const OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.black, width: 1.5),
                   ),
                   focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                    borderSide:
+                        BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                   ),
                 ),
               ),
@@ -199,7 +210,8 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   ),
                   child: Text(
                     isProvider ? "Save Prompt" : "Add Prompt",
-                    style: TextStyles.font14Hint500Weight.copyWith(color: Colors.white),
+                    style: TextStyles.font14Hint500Weight
+                        .copyWith(color: Colors.white),
                   ),
                 ),
               ),
@@ -212,12 +224,15 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     itemBuilder: (context, index) {
                       final prompt = prompts[index];
                       return ListTile(
-                        title: Text("${prompt.prompt} (${prompt.numberOfDays} day(s))"),
+                        title: Text(
+                            "${prompt.prompt} (${prompt.numberOfDays} day(s))"),
                         subtitle: Text("Response: ${prompt.resReq}"),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.grey),
                           onPressed: () {
-                            setState(() { prompts.removeAt(index); });
+                            setState(() {
+                              prompts.removeAt(index);
+                            });
                           },
                         ),
                       );
@@ -229,33 +244,39 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
           ),
         ),
       ),
-      bottomNavigationBar: isProvider ? null : Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => RecoverySummaryScreen(
-                    prompts: prompts,
-                    medications: widget.medications,
-                    device: widget.device,
+      bottomNavigationBar: isProvider
+          ? null
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    debugPrint(
+                      'TRACE 5 COUNSELING DATA -> SUMMARY: ${widget.device?.remoteId}',
+                    );
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RecoverySummaryScreen(
+                          prompts: prompts,
+                          medications: widget.medications,
+                          device: widget.device,
+                        ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 15.h),
+                  ),
+                  child: Text(
+                    "Continue",
+                    style: TextStyles.font14Hint500Weight
+                        .copyWith(color: ColorsManager.mainBlue),
                   ),
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              padding: EdgeInsets.symmetric(vertical: 15.h),
+              ),
             ),
-            child: Text(
-              "Continue",
-              style: TextStyles.font14Hint500Weight.copyWith(color: ColorsManager.mainBlue),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

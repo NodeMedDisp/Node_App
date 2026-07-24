@@ -31,6 +31,14 @@ class RecoverySummaryScreen extends StatefulWidget {
 class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
   DateTime StartDate = DateTime.now();
 
+  @override
+  void initState() {
+    super.initState();
+    debugPrint(
+      'TRACE 6 SUMMARY RECEIVED DEVICE: ${widget.device?.remoteId}',
+    );
+  }
+
   Future<void> _saveDataToFile() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -43,13 +51,14 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
       }
 
       final currentTime = getCurrentTime();
-      await file.writeAsString('Current Time: $currentTime\n', mode: FileMode.write);
+      await file.writeAsString('Current Time: $currentTime\n',
+          mode: FileMode.write);
 
       for (var medication in widget.medications) {
         await file.writeAsString(
           '\nMedication: ${medication.name}\nDose: ${medication.dose}\nFrequency: ${medication.frequency}\n'
-              'Times: ${medication.times}\n'
-              'Days: ${medication.numDays}\n',
+          'Times: ${medication.times}\n'
+          'Days: ${medication.numDays}\n',
           mode: FileMode.append,
         );
       }
@@ -59,9 +68,9 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
 
         await file.writeAsString(
           '\nPrompt: ${prompt.prompt}\n'
-              'Required Response: ${prompt.resReq}\n'
-              'Options: $options\n'
-              'Days: ${prompt.numberOfDays}\n',
+          'Required Response: ${prompt.resReq}\n'
+          'Options: $options\n'
+          'Days: ${prompt.numberOfDays}\n',
           mode: FileMode.append,
         );
       }
@@ -102,7 +111,11 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
             int chunkSize = 20;
 
             for (int i = 0; i < bytes.length; i += chunkSize) {
-              List<int> chunk = bytes.sublist(i, (i + chunkSize > bytes.length) ? bytes.length : i + chunkSize);
+              List<int> chunk = bytes.sublist(
+                  i,
+                  (i + chunkSize > bytes.length)
+                      ? bytes.length
+                      : i + chunkSize);
               await characteristic.write(chunk, withoutResponse: false);
             }
             print('File sent successfully!');
@@ -140,13 +153,16 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
             onPressed: () async {
               await _saveDataToFile();
               print("SUMMARY DEVICE: ${widget.device?.remoteId}");
-              
+
               if (widget.device != null) {
-                print("BLE mode: sending file to connected device ${widget.device!.remoteId}");
+                print(
+                    "BLE mode: sending file to connected device ${widget.device!.remoteId}");
                 await sendFileToDevice(widget.device!);
               } else {
-                print("ERROR: No BluetoothDevice was passed into RecoverySummaryScreen.");
-                print("BLE transmission skipped because widget.device is null.");
+                print(
+                    "ERROR: No BluetoothDevice was passed into RecoverySummaryScreen.");
+                print(
+                    "BLE transmission skipped because widget.device is null.");
               }
 
               if (!context.mounted) return;
