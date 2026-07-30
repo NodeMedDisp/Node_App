@@ -255,13 +255,31 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                       .map((time) => time!.format(context))
                       .toList();
 
-                  Navigator.pop(context, Medication(
-                    name: _medicationController.text,
-                    dose: _doseController.text,
-                    frequency: _frequency ?? '',
-                    numDays: int.tryParse(_daysController.text) ?? 0,
-                    times: times.join(', '),
-                  ));
+                  final originalMedication = widget.medication;
+
+                  final Medication updatedMedication;
+
+                  if (originalMedication == null) {
+                    updatedMedication = Medication(
+                      name: _medicationController.text.trim(),
+                      dose: _doseController.text.trim(),
+                      frequency: _frequency ?? '',
+                      numDays:
+                          int.tryParse(_daysController.text.trim()) ?? 0,
+                      times: times.join(', '),
+                    );
+                  } else {
+                    updatedMedication = originalMedication.copyWith(
+                      name: _medicationController.text.trim(),
+                      dose: _doseController.text.trim(),
+                      frequency: _frequency ?? '',
+                      numDays:
+                          int.tryParse(_daysController.text.trim()) ?? 0,
+                      times: times.join(', '),
+                    );
+                  }
+
+                  Navigator.pop(context, updatedMedication);
                 },
                 child: Text(
                   widget.medication == null ? "Add Medication" : "Save Changes",

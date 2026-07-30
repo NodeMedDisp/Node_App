@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../HomePage/home_page.dart';
@@ -39,52 +40,118 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
     );
   }
 
+  void _appendRewardSection(
+    StringBuffer buffer, {
+    required String sectionName,
+    required bool enabled,
+    required String title,
+    required String threshold,
+    int? quantity,
+  }) {
+    buffer.writeln('$sectionName: ${enabled ? 'Yes' : 'No'}');
+
+    if (!enabled) {
+      return;
+    }
+
+    buffer.writeln('Title: ${title.trim()}');
+
+    final normalizedThreshold = threshold.trim().isEmpty
+        ? 'None'
+        : threshold.trim();
+
+    buffer.writeln('Threshold: $normalizedThreshold');
+
+    if (sectionName == 'Token') {
+      buffer.writeln('Quantity: ${quantity ?? 0}');
+    }
+  }
+
   Future<void> _saveDataToFile() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/user_responses.txt');
-      print('File saved at: ${file.path}');
 
-      String getCurrentTime() {
-        final now = DateTime.now();
-        return DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
-      }
+      final currentTime =
+          DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
-      final currentTime = getCurrentTime();
-      await file.writeAsString('Current Time: $currentTime\n',
-          mode: FileMode.write);
+      final buffer = StringBuffer();
 
-      for (var medication in widget.medications) {
-        await file.writeAsString(
-          '\nMedication: ${medication.name}\nDose: ${medication.dose}\nFrequency: ${medication.frequency}\n'
-          'Times: ${medication.times}\n'
-          'Days: ${medication.numDays}\n',
-          mode: FileMode.append,
+      buffer.writeln('Current Time: $currentTime');
+      buffer.writeln();
+
+      for (final medication in widget.medications) {
+        buffer.writeln('Medication: ${medication.name}');
+        buffer.writeln('Dose: ${medication.dose}');
+        buffer.writeln('Frequency: ${medication.frequency}');
+        buffer.writeln('Times: ${medication.times}');
+        buffer.writeln('Days: 1 to ${medication.numDays}');
+
+        _appendRewardSection(
+          buffer,
+          sectionName: 'Streak',
+          enabled: medication.streakEnabled,
+          title: medication.streakTitle,
+          threshold: medication.streakThreshold,
         );
-      }
 
-      for (var prompt in widget.prompts) {
-        final options = prompt.options.join(', ');
-
-        await file.writeAsString(
-          '\nPrompt: ${prompt.prompt}\n'
-          'Required Response: ${prompt.resReq}\n'
-          'Options: $options\n'
-          'Days: ${prompt.numberOfDays}\n',
-          mode: FileMode.append,
+        _appendRewardSection(
+          buffer,
+          sectionName: 'Token',
+          enabled: medication.tokenEnabled,
+          title: medication.tokenTitle,
+          threshold: medication.tokenThreshold,
+          quantity: medication.tokenQuantity,
         );
+
+        // Blank line ends this medication block.
+        buffer.writeln();
       }
 
-      await file.writeAsString('EOF\n', mode: FileMode.append);
-      print('Data saved to file successfully!');
+      for (final prompt in widget.prompts) {
+        buffer.writeln('Prompt: ${prompt.prompt}');
+        buffer.writeln('Required Response: ${prompt.resReq}');
+        buffer.writeln('Options: ${prompt.options.join(', ')}');
+        buffer.writeln('Days: 1 to ${prompt.numberOfDays}');
+
+        _appendRewardSection(
+          buffer,
+          sectionName: 'Streak',
+          enabled: prompt.streakEnabled,
+          title: prompt.streakTitle,
+          threshold: prompt.streakThreshold,
+        );
+
+        _appendRewardSection(
+          buffer,
+          sectionName: 'Token',
+          enabled: prompt.tokenEnabled,
+          title: prompt.tokenTitle,
+          threshold: prompt.tokenThreshold,
+          quantity: prompt.tokenQuantity,
+        );
+
+        // Blank line ends this prompt block.
+        buffer.writeln();
+      }
+
+      await file.writeAsString(
+        buffer.toString(),
+        mode: FileMode.write,
+        flush: true,
+      );
+
+      debugPrint('File saved at: ${file.path}');
 
       final savedText = await file.readAsString();
 
-      debugPrint("========== SAVED FILE CONTENTS ==========");
+      debugPrint('========== SAVED FILE CONTENTS ==========');
       debugPrint(savedText);
-      debugPrint("========== END SAVED FILE CONTENTS ==========");
-    } catch (e) {
-      print('Error saving data to file: $e');
+      debugPrint('========== END SAVED FILE CONTENTS ==========');
+    } catch (error, stackTrace) {
+      debugPrint('Error saving data to file: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
     }
   }
 
@@ -107,7 +174,11 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
       for (var service in services) {
         for (var characteristic in service.characteristics) {
           if (characteristic.properties.write) {
-            List<int> bytes = fileContent.codeUnits;
+            // EOF is a BLE transport marker. It is not stored in the
+            // clean local configuration file.
+            final payload = '${fileContent.trimRight()}\nEOF\n';
+
+            final List<int> bytes = utf8.encode(payload);
             int chunkSize = 20;
 
             for (int i = 0; i < bytes.length; i += chunkSize) {
