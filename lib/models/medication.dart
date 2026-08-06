@@ -1,4 +1,5 @@
 class Medication {
+  final String? id;
   final String name;
   final String dose;
   final String frequency;
@@ -15,6 +16,7 @@ class Medication {
   final int tokenQuantity;
 
   const Medication({
+    this.id,
     required this.name,
     required this.dose,
     required this.frequency,
@@ -30,6 +32,7 @@ class Medication {
   });
 
   Medication copyWith({
+    String? id,
     String? name,
     String? dose,
     String? frequency,
@@ -44,6 +47,7 @@ class Medication {
     int? tokenQuantity,
   }) {
     return Medication(
+      id: id ?? this.id,
       name: name ?? this.name,
       dose: dose ?? this.dose,
       frequency: frequency ?? this.frequency,
@@ -76,8 +80,12 @@ class Medication {
     };
   }
 
-  factory Medication.fromJson(Map<String, dynamic> json) {
+  factory Medication.fromJson(
+    Map<String, dynamic> json, {
+    String? id,
+  }) {
     return Medication(
+      id: id ?? json['id']?.toString(),
       name: json['name']?.toString() ?? '',
       dose: json['dose']?.toString() ?? '',
       frequency: json['frequency']?.toString() ?? '',
@@ -106,9 +114,7 @@ class Medication {
 
     final normalized = value?.toString().trim().toLowerCase();
 
-    return normalized == 'true' ||
-        normalized == 'yes' ||
-        normalized == '1';
+    return normalized == 'true' || normalized == 'yes' || normalized == '1';
   }
 
   static int _readInt(dynamic value) {

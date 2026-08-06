@@ -1,4 +1,5 @@
 class CounselingQuestion {
+  final String? id;
   final String prompt;
   final String resReq;
   final List<String> options;
@@ -14,6 +15,7 @@ class CounselingQuestion {
   final int tokenQuantity;
 
   const CounselingQuestion({
+    this.id,
     required this.prompt,
     required this.resReq,
     required this.options,
@@ -28,6 +30,7 @@ class CounselingQuestion {
   });
 
   CounselingQuestion copyWith({
+    String? id,
     String? prompt,
     String? resReq,
     List<String>? options,
@@ -41,6 +44,7 @@ class CounselingQuestion {
     int? tokenQuantity,
   }) {
     return CounselingQuestion(
+      id: id ?? this.id,
       prompt: prompt ?? this.prompt,
       resReq: resReq ?? this.resReq,
       options: options ?? this.options,
@@ -71,8 +75,12 @@ class CounselingQuestion {
     };
   }
 
-  factory CounselingQuestion.fromJson(Map<String, dynamic> json) {
+  factory CounselingQuestion.fromJson(
+    Map<String, dynamic> json, {
+    String? id,
+  }) {
     return CounselingQuestion(
+      id: id ?? json['id']?.toString(),
       prompt: json['prompt']?.toString() ?? '',
       resReq: json['resReq']?.toString() ?? '',
       options: json['options'] is List
