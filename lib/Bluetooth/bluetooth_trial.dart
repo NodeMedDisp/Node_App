@@ -3,20 +3,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../LoginComp/logic/provider/provider_cubit.dart'; // Accessing the Cubit
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:path_provider/path_provider.dart';
+
 
 class BLEScannerWidget extends StatefulWidget {
-  const BLEScannerWidget({Key? key}) : super(key: key);
+  const BLEScannerWidget({super.key});
 
   @override
-  _BLEScannerWidgetState createState() => _BLEScannerWidgetState();
+  State<BLEScannerWidget> createState() => _BLEScannerWidgetState();
 }
 
 class _BLEScannerWidgetState extends State<BLEScannerWidget> {
   List<ScanResult> scanResults = [];
-  BluetoothDevice? connectedDevice;
   bool isScanning = false;
 
   StreamSubscription<List<ScanResult>>? scanResultsSubscription;
@@ -31,33 +28,36 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
     });
   }
 
+/*
   /// NEW: Simulates a successful data transfer from a device without using Bluetooth hardware
   void simulateFakeImport() {
     // This is the EXACT format the hardware will eventually send
     String fakeDeviceData = """
-Medication: Buprenorphine
-Dose: 8mg
-Frequency: Daily
-Times: 9:00 AM, 9:00 PM
-Days: 0 to 45
--------------------
-Medication: Naloxone
-Dose: 2mg
-Frequency: As Needed
-Times: 12:00 PM
-Days: 0 to 14
--------------------
-""";
+      Medication: Buprenorphine
+      Dose: 8mg
+      Frequency: Daily
+      Times: 9:00 AM, 9:00 PM
+      Days: 0 to 45
+      -------------------
+      Medication: Naloxone
+      Dose: 2mg
+      Frequency: As Needed
+      Times: 12:00 PM
+      Days: 0 to 14
+      -------------------
+      """;
 
     debugPrint("DEBUG: Simulating import of fake device data...");
 
     // Use our existing parser
-    List<Map<String, dynamic>> parsedMeds = _parseIncomingData(fakeDeviceData);
+    final parsedMeds = _parseIncomingData(fakeDeviceData);
 
     if (parsedMeds.isNotEmpty) {
       context.read<ProviderCubit>().importPatientFromDevice(
-        deviceName: "Simulated-NODE-01",
+        displayName: "Simulated NODE Patient",
+        deviceId: "Simulated-NODE-01",
         medications: parsedMeds,
+        prompts: const [],
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -71,6 +71,7 @@ Days: 0 to 14
       Navigator.pop(context);
     }
   }
+  */
 
   Future<void> checkPermissionsThenStartScan() async {
     final hasPermissions = await requestBluetoothPermissions();
@@ -191,29 +192,44 @@ Days: 0 to 14
   Future<void> connectToDevice(BluetoothDevice device) async {
     final hasPermissions = await requestBluetoothPermissions();
 
+    if (!mounted) return;
+
     if (!hasPermissions) {
       showPermissionDialog();
       return;
     }
 
     try {
-      debugPrint('Connecting to ${device.platformName}');
+      debugPrint(
+        'BLE SCANNER: Connecting to '
+        '${device.platformName} (${device.remoteId})',
+      );
+
+      await FlutterBluePlus.stopScan();
       await device.connect();
 
       if (!mounted) return;
 
-      setState(() {
-        connectedDevice = device;
-      });
+      debugPrint(
+        'BLE SCANNER: Connected. Returning device '
+        '${device.remoteId}',
+      );
 
-      debugPrint("DEBUG: Returning connected device to previous screen: ${device.remoteId}");
       Navigator.pop(context, device);
-      
     } catch (e) {
-      debugPrint('Error connecting to device: $e');
+      debugPrint('BLE SCANNER: Connection failed: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not connect to device: $e'),
+        ),
+      );
     }
   }
 
+/*
   /// Formats the Patient Medication objects into a text string
   String _formatMedicationData(List<dynamic> medications) {
     if (medications.isEmpty) return "No Medication Data Found";
@@ -265,28 +281,68 @@ Days: 0 to 14
   }
 
   /// Parses a text string from the device back into Medication objects
-  List<Map<String, dynamic>> _parseIncomingData(String data) {
-    List<Map<String, dynamic>> newMeds = [];
-    List<String> entries = data.split("-------------------");
+  List<Medication> _parseIncomingData(String data) {
+    final List<Medication> newMeds = [];
+    final List<String> entries = data.split("-------------------");
 
-    for (var entry in entries) {
-      if (entry.trim().isEmpty) continue;
+    String valueAfterColon(String line) {
+      final colonIndex = line.indexOf(':');
 
-      Map<String, dynamic> med = {};
-      List<String> lines = entry.trim().split("\n");
+      if (colonIndex == -1) {
+        return '';
+      }
 
-      for (var line in lines) {
-        if (line.contains("Medication:")) med['name'] = line.split(":")[1].trim();
-        if (line.contains("Dose:")) med['dose'] = line.split(":")[1].trim();
-        if (line.contains("Frequency:")) med['frequency'] = line.split(":")[1].trim();
-        if (line.contains("Times:")) med['times'] = line.split(":")[1].trim();
-        if (line.contains("Days:")) {
-          String daysPart = line.split(":")[1].trim();
-          med['numDays'] = int.tryParse(daysPart.split("to").last.trim()) ?? 0;
+      return line.substring(colonIndex + 1).trim();
+    }
+
+    for (final entry in entries) {
+      if (entry.trim().isEmpty) {
+        continue;
+      }
+
+      String name = '';
+      String dose = '';
+      String frequency = '';
+      String times = '';
+      int numDays = 0;
+
+      final List<String> lines = entry.trim().split('\n');
+
+      for (final line in lines) {
+        final trimmedLine = line.trim();
+
+        if (trimmedLine.startsWith('Medication:')) {
+          name = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Dose:')) {
+          dose = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Frequency:')) {
+          frequency = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Times:')) {
+          times = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Days:')) {
+          final daysPart = valueAfterColon(trimmedLine);
+
+          numDays =
+              int.tryParse(
+                daysPart.split('to').last.trim(),
+              ) ??
+              0;
         }
       }
-      if (med.containsKey('name')) newMeds.add(med);
+
+      if (name.isNotEmpty) {
+        newMeds.add(
+          Medication(
+            name: name,
+            dose: dose,
+            frequency: frequency,
+            times: times,
+            numDays: numDays,
+          ),
+        );
+      }
     }
+
     return newMeds;
   }
 
@@ -304,13 +360,18 @@ Days: 0 to 14
             receivedText = String.fromCharCodes(value);
 
             if (receivedText.isNotEmpty) {
-              List<Map<String, dynamic>> parsedMeds = _parseIncomingData(receivedText);
+              final List<Medication> parsedMeds =_parseIncomingData(fakeDeviceData);
 
               if (parsedMeds.isNotEmpty) {
                 context.read<ProviderCubit>().importPatientFromDevice(
-                    deviceName: device.platformName.isNotEmpty ? device.platformName : "New Device",
-                    medications: parsedMeds
-                );
+                displayName:
+                    device.platformName.isNotEmpty
+                        ? device.platformName
+                        : "New Patient",
+                deviceId: device.remoteId.toString(),
+                medications: parsedMeds,
+                prompts: const [],
+              );
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("New Patient Imported!"), backgroundColor: Colors.blue),
@@ -329,6 +390,7 @@ Days: 0 to 14
       debugPrint('Error receiving data: $e');
     }
   }
+  */
 
   ///Request Bluetooth
   Future<bool> requestBluetoothPermissions() async {
@@ -360,8 +422,6 @@ Days: 0 to 14
 
   @override
   Widget build(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final List<dynamic> patientMeds = args?['medications'] ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -370,6 +430,7 @@ Days: 0 to 14
       body: Column(
         children: [
           // TEST SECTION: Simulated Import (Bypasses Bluetooth errors)
+          /*
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16.0),
@@ -396,8 +457,10 @@ Days: 0 to 14
               ],
             ),
           ),
+          */
           const Divider(height: 1),
 
+/*
           if (connectedDevice != null)
             Container(
               width: double.infinity,
@@ -409,6 +472,7 @@ Days: 0 to 14
                 textAlign: TextAlign.center,
               ),
             ),
+            */
           Expanded(
             child: scanResults.isEmpty
                 ? Center(child: Text(isScanning ? 'Scanning for devices...' : 'No devices found'))
@@ -416,48 +480,24 @@ Days: 0 to 14
               itemCount: scanResults.length,
               itemBuilder: (context, index) {
                 final device = scanResults[index].device;
-                final isConnected = connectedDevice?.remoteId == device.remoteId;
+                //final isConnected = connectedDevice?.remoteId == device.remoteId;
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: Text(device.platformName.isNotEmpty ? device.platformName : 'Unknown Device'),
-                        subtitle: Text(device.remoteId.toString()),
-                        trailing: ElevatedButton(
-                          onPressed: isConnected ? null : () => connectToDevice(device),
-                          child: Text(isConnected ? 'Connected' : 'Connect'),
-                        ),
-                      ),
-                      if (isConnected)
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            children: [
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  icon: const Icon(Icons.upload),
-                                  onPressed: () => sendPatientConfigToDevice(device, patientMeds),
-                                  label: const Text('Configure Selected Patient'),
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  icon: const Icon(Icons.download),
-                                  onPressed: () => receiveDataAndCreatePatient(device),
-                                  label: const Text('Import Patient from Device'),
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  child: ListTile(
+                    title: Text(
+                      device.platformName.isNotEmpty
+                          ? device.platformName
+                          : 'Unknown Device',
+                    ),
+                    subtitle: Text(device.remoteId.toString()),
+                    trailing: ElevatedButton(
+                      onPressed: () => connectToDevice(device),
+                      child: const Text('Connect'),
+                    ),
                   ),
                 );
               },

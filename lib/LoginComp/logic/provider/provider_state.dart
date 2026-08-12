@@ -1,24 +1,26 @@
 import 'package:equatable/equatable.dart';
-import '../../../models/medication.dart';
+
 import '../../../models/counseling_question.dart';
+import '../../../models/medication.dart';
 import 'provider_user.dart';
 
 class ProviderState extends Equatable {
   final bool loading;
+  final bool saving;
+  final String? errorMessage;
+
   final List<ProviderUser> users;
   final ProviderUser? selectedUser;
 
-  // Recovery progress (BLE-style structured entries)
   final Map<DateTime, List<Map<String, dynamic>>>? recoveryMap;
 
-  // Using Medication model
   final List<Medication> demoMedications;
-
-  // Using CounselingQuestion model
   final List<CounselingQuestion> demoPrompts;
 
   const ProviderState({
     this.loading = false,
+    this.saving = false,
+    this.errorMessage,
     this.users = const [],
     this.selectedUser,
     this.recoveryMap,
@@ -28,18 +30,28 @@ class ProviderState extends Equatable {
 
   ProviderState copyWith({
     bool? loading,
+    bool? saving,
+    String? errorMessage,
+    bool clearError = false,
     List<ProviderUser>? users,
     ProviderUser? selectedUser,
+    bool clearSelectedUser = false,
     Map<DateTime, List<Map<String, dynamic>>>? recoveryMap,
     List<Medication>? demoMedications,
     List<CounselingQuestion>? demoPrompts,
   }) {
     return ProviderState(
       loading: loading ?? this.loading,
+      saving: saving ?? this.saving,
+      errorMessage:
+          clearError ? null : errorMessage ?? this.errorMessage,
       users: users ?? this.users,
-      selectedUser: selectedUser ?? this.selectedUser,
+      selectedUser: clearSelectedUser
+          ? null
+          : selectedUser ?? this.selectedUser,
       recoveryMap: recoveryMap ?? this.recoveryMap,
-      demoMedications: demoMedications ?? this.demoMedications,
+      demoMedications:
+          demoMedications ?? this.demoMedications,
       demoPrompts: demoPrompts ?? this.demoPrompts,
     );
   }
@@ -47,6 +59,8 @@ class ProviderState extends Equatable {
   @override
   List<Object?> get props => [
         loading,
+        saving,
+        errorMessage,
         users,
         selectedUser,
         recoveryMap,

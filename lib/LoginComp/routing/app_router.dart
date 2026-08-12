@@ -12,6 +12,7 @@ import '../screens/create_password/ui/create_password.dart';
 import '../screens/forget/ui/forget_screen.dart';
 import '../screens/login/ui/login_screen.dart';
 import '../screens/signup/ui/sign_up_sceen.dart';
+import '../data/firestore_provider_repository.dart';
 import 'routes.dart';
 
 class AppRouter {
@@ -84,16 +85,27 @@ class AppRouter {
         );
 
       case Routes.providerMain:
-        final arguments = settings.arguments;
-        String? clinicCode;
-        if (arguments is Map<String, dynamic>) {
-          clinicCode = arguments['clinicCode'] as String?;
-        }
+        final args = settings.arguments as Map<String, dynamic>?;
+
+        final clinicCode = args?['clinicCode'] as String?;
+
+        final normalizedClinicId =
+            clinicCode?.trim().isNotEmpty == true
+                ? clinicCode!.trim()
+                : 'demo-clinic';
+
+        debugPrint(
+          'ROUTER: Opening provider clinic=$normalizedClinicId',
+        );
 
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
-            create: (_) => ProviderCubit()..loadClinicData(clinicCode),
-            child: ProviderMainScreen(clinicCode: clinicCode),
+            create: (_) => ProviderCubit(
+              repository: FirestoreProviderRepository(),
+            )..loadClinicData(normalizedClinicId),
+            child: ProviderMainScreen(
+              clinicCode: normalizedClinicId,
+            ),
           ),
         );
     }

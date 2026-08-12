@@ -1,188 +1,541 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../models/medication.dart';
+
 import '../../../models/counseling_question.dart';
+import '../../../models/medication.dart';
+import '../../data/provider_repository.dart';
 import 'provider_state.dart';
 import 'provider_user.dart';
 
 class ProviderCubit extends Cubit<ProviderState> {
-  ProviderCubit() : super(const ProviderState());
+  final ProviderRepository repository;
 
-  // Per-user demo data stored as model objects
-  final Map<String, List<Medication>> _demoMedicationsByUser = {
-    "u1": [
-      Medication(
-        name: "Aspirin",
-        dose: "100mg",
-        times: "8:00 PM",
-        frequency: "Daily",
-        numDays: 30,
-      ),
-      Medication(
-        name: "Buprenorphine",
-        dose: "8mg",
-        times: "9:00 PM",
-        frequency: "Daily",
-        numDays: 30,
-      ),
-    ],
-    "u2": [
-      Medication(
-        name: "Naloxone",
-        dose: "4mg",
-        times: "10:00",
-        frequency: "Daily",
-        numDays: 30,
-      ),
-      Medication(
-        name: "Ibuprofen",
-        dose: "200mg",
-        times: "14:00",
-        frequency: "Daily",
-        numDays: 30,
-      ),
-    ],
-  };
+  StreamSubscription<List<ProviderUser>>?
+      _patientsSubscription;
 
-  final Map<String, List<CounselingQuestion>> _demoPromptsByUser = {
-    "u1": [
-      CounselingQuestion(
-        prompt: "How stressed are you today?",
-        resReq: "number",
-        options: const [],
-        numberOfDays: 30,
-      ),
-      CounselingQuestion(
-        prompt: "Did you sleep well last night?",
-        resReq: "yes_no",
-        options: const [],
-        numberOfDays: 30,
-      ),
-    ],
-    "u2": [
-      CounselingQuestion(
-        prompt: "How is your pain level today?",
-        resReq: "number",
-        options: const [],
-        numberOfDays: 30,
-      ),
-      CounselingQuestion(
-        prompt: "Have you felt cravings today?",
-        resReq: "yes_no",
-        options: const [],
-        numberOfDays: 30,
-      ),
-    ],
-  };
+  StreamSubscription<List<Medication>>?
+      _medicationsSubscription;
+
+  StreamSubscription<List<CounselingQuestion>>?
+      _promptsSubscription;
+
+  String? _clinicId;
+  String? _watchedPatientId;
+
+  ProviderCubit({
+    required this.repository,
+  }) : super(const ProviderState());
 
   Future<void> loadClinicData(String? clinicCode) async {
-    emit(state.copyWith(loading: true, demoMedications: [], demoPrompts: []));
+    final normalizedClinicId = clinicCode?.trim();
 
-    await Future.delayed(const Duration(milliseconds: 500));
+    if (normalizedClinicId == null ||
+        normalizedClinicId.isEmpty) {
+      emit(
+        state.copyWith(
+          loading: false,
+          errorMessage: 'No clinic ID was supplied.',
+        ),
+      );
 
-    final demoUsers = <ProviderUser>[
-      ProviderUser(
-        id: 'u1',
-        displayName: 'Demo User 1',
-        deviceId: 'DEV-001',
-        startDate: DateTime.now().subtract(const Duration(days: 10)),
-        latestEntryDate: DateTime.now(),
+      debugPrint(
+        'PROVIDER CUBIT ERROR: Clinic ID is empty',
+      );
+      return;
+    }
+
+    if (_clinicId == normalizedClinicId &&
+        _patientsSubscription != null) {
+      debugPrint(
+        'PROVIDER CUBIT: Clinic already loaded; '
+        'skipping duplicate load',
+      );
+      return;
+    }
+
+    debugPrint(
+      'PROVIDER CUBIT: Loading clinic=$normalizedClinicId',
+    );
+
+    await _cancelSubscriptions();
+
+    _clinicId = normalizedClinicId;
+
+    emit(
+      state.copyWith(
+        loading: true,
+        saving: false,
+        clearError: true,
+        users: const [],
+        clearSelectedUser: true,
+        demoMedications: const [],
+        demoPrompts: const [],
       ),
-      ProviderUser(
-        id: 'u2',
-        displayName: 'Demo User 2',
-        deviceId: 'DEV-002',
-        startDate: DateTime.now().subtract(const Duration(days: 5)),
-        latestEntryDate: DateTime.now(),
-      ),
-    ];
+    );
 
-    final firstUser = demoUsers.first;
+    try {
+      await repository.seedDemoPatientsIfMissing(
+        normalizedClinicId,
+      );
+
+      _patientsSubscription = repository
+          .watchPatients(normalizedClinicId)
+          .listen(
+        _handlePatientSnapshot,
+        onError: (
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          _handleStreamError(
+            'patient list',
+            error,
+            stackTrace,
+          );
+        },
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'PROVIDER CUBIT ERROR: Clinic load failed: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+
+      emit(
+        state.copyWith(
+          loading: false,
+          errorMessage:
+              'Could not load clinic data: $error',
+        ),
+      );
+    }
+  }
+
+  void _handlePatientSnapshot(
+    List<ProviderUser> patients,
+  ) {
+    if (isClosed) {
+      return;
+    }
+
+    debugPrint(
+      'PROVIDER CUBIT: Received '
+      '${patients.length} patients',
+    );
+
+    ProviderUser? selectedPatient;
+    final previousSelectedId = state.selectedUser?.id;
+
+    if (previousSelectedId != null) {
+      for (final patient in patients) {
+        if (patient.id == previousSelectedId) {
+          selectedPatient = patient;
+          break;
+        }
+      }
+    }
+
+    if (selectedPatient == null && patients.isNotEmpty) {
+      selectedPatient = patients.first;
+    }
 
     emit(
       state.copyWith(
         loading: false,
-        users: demoUsers,
-        selectedUser: firstUser,
-        demoMedications: List.from(_demoMedicationsByUser[firstUser.id] ?? []),
-        demoPrompts: List.from(_demoPromptsByUser[firstUser.id] ?? []),
+        clearError: true,
+        users: patients,
+        selectedUser: selectedPatient,
+        clearSelectedUser: selectedPatient == null,
       ),
     );
+
+    if (selectedPatient == null) {
+      unawaited(_stopProgramListeners());
+      return;
+    }
+
+    if (_watchedPatientId != selectedPatient.id) {
+      unawaited(
+        _watchSelectedPatientProgram(selectedPatient),
+      );
+    }
   }
 
   void selectUser(ProviderUser user) {
-    // 1. Clear current demo data immediately to avoid leakage during transition
-    emit(state.copyWith(demoMedications: [], demoPrompts: []));
+    debugPrint(
+      'PROVIDER CUBIT: Selecting patient '
+      'id=${user.id} name=${user.displayName}',
+    );
 
-    // 2. Load the specific user's data
     emit(
       state.copyWith(
         selectedUser: user,
-        demoMedications: List.from(_demoMedicationsByUser[user.id] ?? []),
-        demoPrompts: List.from(_demoPromptsByUser[user.id] ?? []),
+        demoMedications: const [],
+        demoPrompts: const [],
+        clearError: true,
+      ),
+    );
+
+    unawaited(_watchSelectedPatientProgram(user));
+  }
+
+  Future<void> _watchSelectedPatientProgram(
+    ProviderUser user,
+  ) async {
+    final clinicId = _requireClinicId();
+
+    await _medicationsSubscription?.cancel();
+    await _promptsSubscription?.cancel();
+
+    _watchedPatientId = user.id;
+
+    debugPrint(
+      'PROVIDER CUBIT: Watching program '
+      'patient=${user.id}',
+    );
+
+    _medicationsSubscription = repository
+        .watchMedications(
+          clinicId: clinicId,
+          patientId: user.id,
+        )
+        .listen(
+      (medications) {
+        if (isClosed ||
+            state.selectedUser?.id != user.id) {
+          return;
+        }
+
+        debugPrint(
+          'PROVIDER CUBIT: Updating UI with '
+          '${medications.length} medications '
+          'patient=${user.id}',
+        );
+
+        emit(
+          state.copyWith(
+            demoMedications: medications,
+          ),
+        );
+      },
+      onError: (
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        _handleStreamError(
+          'medications',
+          error,
+          stackTrace,
+        );
+      },
+    );
+
+    _promptsSubscription = repository
+        .watchPrompts(
+          clinicId: clinicId,
+          patientId: user.id,
+        )
+        .listen(
+      (prompts) {
+        if (isClosed ||
+            state.selectedUser?.id != user.id) {
+          return;
+        }
+
+        debugPrint(
+          'PROVIDER CUBIT: Updating UI with '
+          '${prompts.length} prompts '
+          'patient=${user.id}',
+        );
+
+        emit(
+          state.copyWith(
+            demoPrompts: prompts,
+          ),
+        );
+      },
+      onError: (
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        _handleStreamError(
+          'prompts',
+          error,
+          stackTrace,
+        );
+      },
+    );
+  }
+
+  Future<void> addMedicationToSelectedUser(
+    Medication medication,
+  ) async {
+    final user = _requireSelectedUser();
+
+    await _executeMutation(
+      'add medication',
+      () => repository.addMedication(
+        clinicId: _requireClinicId(),
+        patientId: user.id,
+        medication: medication,
       ),
     );
   }
 
-  /// NEW: Creates a new patient based on data received from a Bluetooth device
-  void importPatientFromDevice({
-    required String deviceName,
-    required List<Map<String, dynamic>> medications,
-  }) {
-    // Create a unique ID and new User object
-    final String newId = "imported_${DateTime.now().millisecondsSinceEpoch}";
-    final newUser = ProviderUser(
-      id: newId,
-      displayName: "Patient ($deviceName)",
-      deviceId: deviceName,
+  Future<void> updateMedicationForSelectedUser(
+    Medication medication,
+  ) async {
+    final user = _requireSelectedUser();
+
+    await _executeMutation(
+      'update medication',
+      () => repository.updateMedication(
+        clinicId: _requireClinicId(),
+        patientId: user.id,
+        medication: medication,
+      ),
+    );
+  }
+
+  Future<void> deleteMedicationFromSelectedUser(
+    String medicationId,
+  ) async {
+    final user = _requireSelectedUser();
+
+    await _executeMutation(
+      'delete medication',
+      () => repository.deleteMedication(
+        clinicId: _requireClinicId(),
+        patientId: user.id,
+        medicationId: medicationId,
+      ),
+    );
+  }
+
+  Future<void> addPromptToSelectedUser(
+    CounselingQuestion prompt,
+  ) async {
+    final user = _requireSelectedUser();
+
+    await _executeMutation(
+      'add prompt',
+      () => repository.addPrompt(
+        clinicId: _requireClinicId(),
+        patientId: user.id,
+        prompt: prompt,
+      ),
+    );
+  }
+
+  Future<void> updatePromptForSelectedUser(
+    CounselingQuestion prompt,
+  ) async {
+    final user = _requireSelectedUser();
+
+    await _executeMutation(
+      'update prompt',
+      () => repository.updatePrompt(
+        clinicId: _requireClinicId(),
+        patientId: user.id,
+        prompt: prompt,
+      ),
+    );
+  }
+
+  Future<void> deletePromptFromSelectedUser(
+    String promptId,
+  ) async {
+    final user = _requireSelectedUser();
+
+    await _executeMutation(
+      'delete prompt',
+      () => repository.deletePrompt(
+        clinicId: _requireClinicId(),
+        patientId: user.id,
+        promptId: promptId,
+      ),
+    );
+  }
+
+  Future<ProviderUser?> createPatient({
+    required String displayName,
+    String deviceId = '',
+  }) async {
+    final trimmedName = displayName.trim();
+
+    if (trimmedName.isEmpty) {
+      emit(
+        state.copyWith(
+          errorMessage: 'Enter a patient name.',
+        ),
+      );
+      return null;
+    }
+
+    final patient = ProviderUser(
+      id: '',
+      displayName: trimmedName,
+      deviceId: deviceId.trim(),
+      source: 'manual',
       startDate: DateTime.now(),
       latestEntryDate: DateTime.now(),
     );
 
-    // Convert raw maps from the parser into Medication model objects
-    final List<Medication> medObjects = medications.map((m) {
-      return Medication(
-        name: m['name'] ?? 'Unknown Med',
-        dose: m['dose'] ?? 'Unknown Dose',
-        times: m['times'] ?? '12:00 PM',
-        frequency: m['frequency'] ?? 'Daily',
-        numDays: m['numDays'] ?? 30,
+    final createdPatient =
+        await _executeMutation<ProviderUser>(
+      'create patient',
+      () => repository.createPatient(
+        clinicId: _requireClinicId(),
+        patient: patient,
+      ),
+    );
+
+    selectUser(createdPatient);
+    return createdPatient;
+  }
+
+  Future<PatientImportResult> importPatientFromDevice({
+    required String displayName,
+    required String deviceId,
+    required List<Medication> medications,
+    List<CounselingQuestion> prompts = const [],
+  }) async {
+    final result =
+        await _executeMutation<PatientImportResult>(
+      'import patient from device',
+      () => repository.importPatientFromDevice(
+        clinicId: _requireClinicId(),
+        displayName: displayName,
+        deviceId: deviceId,
+        medications: medications,
+        prompts: prompts,
+      ),
+    );
+
+    selectUser(result.patient);
+    return result;
+  }
+
+  Future<T> _executeMutation<T>(
+    String name,
+    Future<T> Function() operation,
+  ) async {
+    debugPrint(
+      'PROVIDER CUBIT: Starting mutation="$name"',
+    );
+
+    emit(
+      state.copyWith(
+        saving: true,
+        clearError: true,
+      ),
+    );
+
+    try {
+      final result = await operation();
+
+      if (!isClosed) {
+        emit(
+          state.copyWith(
+            saving: false,
+            clearError: true,
+          ),
+        );
+      }
+
+      debugPrint(
+        'PROVIDER CUBIT: Completed mutation="$name"',
       );
-    }).toList();
 
-    // Store in our local maps
-    _demoMedicationsByUser[newId] = medObjects;
-    _demoPromptsByUser[newId] = []; // Start with no prompts for imported users
+      return result;
+    } catch (error, stackTrace) {
+      debugPrint(
+        'PROVIDER CUBIT ERROR: '
+        'Mutation="$name" failed: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
 
-    // Update state with the new user list and select the new user
-    final List<ProviderUser> updatedUsers = List.from(state.users)..add(newUser);
+      if (!isClosed) {
+        emit(
+          state.copyWith(
+            saving: false,
+            errorMessage: '$name failed: $error',
+          ),
+        );
+      }
 
-    emit(state.copyWith(
-      users: updatedUsers,
-      selectedUser: newUser,
-      demoMedications: medObjects,
-      demoPrompts: [],
-    ));
+      rethrow;
+    }
   }
 
-  void addMedicationToSelectedUser(Medication med) {
+  ProviderUser _requireSelectedUser() {
     final user = state.selectedUser;
-    if (user == null) return;
 
-    final currentMeds = _demoMedicationsByUser[user.id] ?? [];
-    currentMeds.add(med);
-    _demoMedicationsByUser[user.id] = currentMeds;
+    if (user == null) {
+      throw StateError(
+        'No provider patient is selected.',
+      );
+    }
 
-    emit(state.copyWith(demoMedications: List.from(currentMeds)));
+    return user;
   }
 
-  void addPromptToSelectedUser(CounselingQuestion prompt) {
-    final user = state.selectedUser;
-    if (user == null) return;
+  String _requireClinicId() {
+    final clinicId = _clinicId;
 
-    final currentPrompts = _demoPromptsByUser[user.id] ?? [];
-    currentPrompts.add(prompt);
-    _demoPromptsByUser[user.id] = currentPrompts;
+    if (clinicId == null || clinicId.isEmpty) {
+      throw StateError(
+        'No clinic is currently loaded.',
+      );
+    }
 
-    emit(state.copyWith(demoPrompts: List.from(currentPrompts)));
+    return clinicId;
+  }
+
+  void _handleStreamError(
+    String streamName,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    debugPrint(
+      'PROVIDER CUBIT ERROR: '
+      '$streamName stream failed: $error',
+    );
+    debugPrintStack(stackTrace: stackTrace);
+
+    if (!isClosed) {
+      emit(
+        state.copyWith(
+          loading: false,
+          errorMessage:
+              'Could not load $streamName: $error',
+        ),
+      );
+    }
+  }
+
+  Future<void> _stopProgramListeners() async {
+    await _medicationsSubscription?.cancel();
+    await _promptsSubscription?.cancel();
+
+    _medicationsSubscription = null;
+    _promptsSubscription = null;
+    _watchedPatientId = null;
+  }
+
+  Future<void> _cancelSubscriptions() async {
+    await _patientsSubscription?.cancel();
+    _patientsSubscription = null;
+
+    await _stopProgramListeners();
+  }
+
+  @override
+  Future<void> close() async {
+    debugPrint('PROVIDER CUBIT: Closing');
+
+    await _cancelSubscriptions();
+
+    return super.close();
   }
 }

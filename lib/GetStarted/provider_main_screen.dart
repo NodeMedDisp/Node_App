@@ -23,12 +23,6 @@ class ProviderMainScreen extends StatefulWidget {
 class _ProviderMainScreenState extends State<ProviderMainScreen> {
   final GlobalKey<CalendarWidgetState> _calendarKey = GlobalKey<CalendarWidgetState>();
 
-  @override
-  void initState() {
-    super.initState();
-    context.read<ProviderCubit>().loadClinicData(widget.clinicCode);
-  }
-
   void _showBluetoothDialog() {
     showDialog(
       context: context,
