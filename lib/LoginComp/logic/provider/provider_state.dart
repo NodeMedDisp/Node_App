@@ -14,8 +14,8 @@ class ProviderState extends Equatable {
 
   final Map<DateTime, List<Map<String, dynamic>>>? recoveryMap;
 
-  final List<Medication> demoMedications;
-  final List<CounselingQuestion> demoPrompts;
+  final List<Medication> selectedMedications;
+  final List<CounselingQuestion> selectedPrompts;
 
   const ProviderState({
     this.loading = false,
@@ -24,8 +24,8 @@ class ProviderState extends Equatable {
     this.users = const [],
     this.selectedUser,
     this.recoveryMap,
-    this.demoMedications = const [],
-    this.demoPrompts = const [],
+    this.selectedMedications = const [],
+    this.selectedPrompts = const [],
   });
 
   ProviderState copyWith({
@@ -37,8 +37,8 @@ class ProviderState extends Equatable {
     ProviderUser? selectedUser,
     bool clearSelectedUser = false,
     Map<DateTime, List<Map<String, dynamic>>>? recoveryMap,
-    List<Medication>? demoMedications,
-    List<CounselingQuestion>? demoPrompts,
+    List<Medication>? selectedMedications,
+    List<CounselingQuestion>? selectedPrompts,
   }) {
     return ProviderState(
       loading: loading ?? this.loading,
@@ -50,9 +50,8 @@ class ProviderState extends Equatable {
           ? null
           : selectedUser ?? this.selectedUser,
       recoveryMap: recoveryMap ?? this.recoveryMap,
-      demoMedications:
-          demoMedications ?? this.demoMedications,
-      demoPrompts: demoPrompts ?? this.demoPrompts,
+      selectedMedications: selectedMedications ?? this.selectedMedications,
+      selectedPrompts: selectedPrompts ?? this.selectedPrompts,
     );
   }
 
@@ -64,7 +63,7 @@ class ProviderState extends Equatable {
         users,
         selectedUser,
         recoveryMap,
-        demoMedications,
-        demoPrompts,
+        selectedMedications,
+        selectedPrompts,
       ];
 }

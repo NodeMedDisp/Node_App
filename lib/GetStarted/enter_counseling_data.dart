@@ -44,7 +44,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
   List<CounselingQuestion> prompts = [];
   String? _errorMessage;
 
-    void _addPrompt() {
+    Future<void> _addPrompt() async {
     final promptText = _promptController.text.trim();
     final numberOfDays = int.tryParse(_daysController.text.trim());
 
@@ -165,8 +165,41 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
     }
 
     if (providerCubit != null) {
-      providerCubit.addPromptToSelectedUser(newPrompt);
-      Navigator.pop(context);
+      try {
+        debugPrint(
+          'PROVIDER PROMPT FORM: '
+          'Saving "${newPrompt.prompt}"',
+        );
+
+        await providerCubit.addPromptToSelectedUser(
+          newPrompt,
+        );
+
+        debugPrint(
+          'PROVIDER PROMPT FORM: Save completed',
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        Navigator.pop(context);
+      } catch (error, stackTrace) {
+        debugPrint(
+          'PROVIDER PROMPT FORM ERROR: $error',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _errorMessage =
+              'Could not save prompt: $error';
+        });
+      }
+
       return;
     }
 

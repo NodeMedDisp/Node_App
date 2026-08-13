@@ -25,6 +25,10 @@ class CalendarWidget extends StatefulWidget {
   final DateTime? externalFocusDay; 
   final Map<DateTime, List<Map<String, dynamic>>>? externalRecoveryProgress; 
 
+  /// Identifies whose data is currently being displayed.
+  /// For provider mode this is the selected Firestore patient ID.
+  final String? dataOwnerId;
+
   const CalendarWidget({
     super.key,
     required this.prompts,
@@ -32,6 +36,7 @@ class CalendarWidget extends StatefulWidget {
     required this.StartDate,
     this.externalFocusDay, 
     this.externalRecoveryProgress, 
+    this.dataOwnerId,
   });
 
   @override
@@ -86,6 +91,35 @@ class CalendarWidgetState extends State<CalendarWidget> {
     checkBluetoothConnection();
   }
 
+  @override
+    void didUpdateWidget(covariant CalendarWidget oldWidget) {
+      super.didUpdateWidget(oldWidget);
+
+      final patientChanged =
+          oldWidget.dataOwnerId != widget.dataOwnerId;
+
+      if (patientChanged) {
+        debugPrint(
+          'CALENDAR: Data owner changed '
+          '${oldWidget.dataOwnerId} -> ${widget.dataOwnerId}',
+        );
+
+        _focusedDay =
+            widget.externalFocusDay ?? widget.StartDate;
+        _selectedDay = _focusedDay;
+
+        // Provider patients should not inherit another patient's
+        // locally-held recovery progress.
+        recoveryProgress.clear();
+
+        if (widget.externalRecoveryProgress != null) {
+          recoveryProgress.addAll(
+            widget.externalRecoveryProgress!,
+          );
+        }
+      }
+    }
+
   void focusOn(DateTime day) {
     setState(() {
       _selectedDay = day;
@@ -126,7 +160,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   void checkBluetoothConnection() async {
-    List<BluetoothDevice> connectedDevices = await FlutterBluePlus.connectedDevices;
+    final List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
     if (connectedDevices.isNotEmpty) {
       setState(() {
         isBluetoothConnected = true; 
@@ -231,6 +265,14 @@ class CalendarWidgetState extends State<CalendarWidget> {
 
   @override
   Widget build(BuildContext context) {
+
+    debugPrint(
+      'CALENDAR BUILD: '
+      'owner=${widget.dataOwnerId} '
+      'medications=${widget.medications.length} '
+      'prompts=${widget.prompts.length}',
+    );
+    
     final promptsForDay = _getPromptsForDay(_selectedDay);
     final medicationsForDay = _getMedicationsForDay(_selectedDay);
     final recoveryProgressForDay = _getRecoveryProgressForDay(_selectedDay);

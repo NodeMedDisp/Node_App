@@ -38,7 +38,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
   int _numTimesPerDay = 0;
   List<TimeOfDay?> _selectedTimes = [];
 
-  void _addMedication() {
+  Future<void> _addMedication() async {
     final medicationName = _medicationController.text.trim();
     final dose = _doseController.text.trim();
     final numberOfDays = int.tryParse(_daysController.text.trim());
@@ -90,17 +90,6 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
       return;
     }
 
-    @override
-    void dispose() {
-      _medicationController.dispose();
-      _doseController.dispose();
-      _daysController.dispose();
-      _streakTitleController.dispose();
-      _tokenTitleController.dispose();
-      _tokenQuantityController.dispose();
-      super.dispose();
-    }
-
     final formattedTimes = _selectedTimes
         .whereType<TimeOfDay>()
         .map((time) => time.format(context))
@@ -136,8 +125,41 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     }
 
     if (providerCubit != null) {
-      providerCubit.addMedicationToSelectedUser(newMed);
-      Navigator.pop(context);
+      try {
+        debugPrint(
+          'PROVIDER MEDICATION FORM: '
+          'Saving "${newMed.name}"',
+        );
+
+        await providerCubit.addMedicationToSelectedUser(
+          newMed,
+        );
+
+        debugPrint(
+          'PROVIDER MEDICATION FORM: Save completed',
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        Navigator.pop(context);
+      } catch (error, stackTrace) {
+        debugPrint(
+          'PROVIDER MEDICATION FORM ERROR: $error',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _errorMessage =
+              'Could not save medication: $error';
+        });
+      }
+
       return;
     }
 
@@ -249,6 +271,17 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     );
   }
 
+   @override
+    void dispose() {
+      _medicationController.dispose();
+      _doseController.dispose();
+      _daysController.dispose();
+      _streakTitleController.dispose();
+      _tokenTitleController.dispose();
+      _tokenQuantityController.dispose();
+      super.dispose();
+    }
+    
   @override
   Widget build(BuildContext context) {
     // Hide the list and continue button if we're in the provider dashboard

@@ -70,8 +70,8 @@ class ProviderCubit extends Cubit<ProviderState> {
         clearError: true,
         users: const [],
         clearSelectedUser: true,
-        demoMedications: const [],
-        demoPrompts: const [],
+        selectedMedications: const [],
+        selectedPrompts: const [],
       ),
     );
 
@@ -170,8 +170,8 @@ class ProviderCubit extends Cubit<ProviderState> {
     emit(
       state.copyWith(
         selectedUser: user,
-        demoMedications: const [],
-        demoPrompts: const [],
+        selectedMedications: const [],
+        selectedPrompts: const [],
         clearError: true,
       ),
     );
@@ -214,7 +214,7 @@ class ProviderCubit extends Cubit<ProviderState> {
 
         emit(
           state.copyWith(
-            demoMedications: medications,
+            selectedMedications: medications,
           ),
         );
       },
@@ -250,7 +250,7 @@ class ProviderCubit extends Cubit<ProviderState> {
 
         emit(
           state.copyWith(
-            demoPrompts: prompts,
+            selectedPrompts: prompts,
           ),
         );
       },

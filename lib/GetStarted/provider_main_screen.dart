@@ -51,7 +51,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
   void _navigateToScanner() {
     // 1. Capture the Cubit instance and the current medication data
     final providerCubit = context.read<ProviderCubit>();
-    final medications = providerCubit.state.demoMedications;
+    final medications = providerCubit.state.selectedMedications;
 
     Navigator.push(
       context,
@@ -89,7 +89,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                 ? Colors.blue
                 : Colors.grey,
             onPressed: () async {
-              List<BluetoothDevice> connectedDevices = await FlutterBluePlus.connectedDevices;
+              final List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
               if (connectedDevices.isEmpty) {
                 _showBluetoothDialog();
               } else {
@@ -118,6 +118,13 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
               builder: (context, state) {
                 final users = state.users;
                 final selectedUser = state.selectedUser;
+                
+                debugPrint(
+                  'PROVIDER MAIN BUILD: '
+                  'patient=${selectedUser?.id} '
+                  'medications=${state.selectedMedications.length} '
+                  'prompts=${state.selectedPrompts.length}',
+                );
 
                 if (state.loading) {
                   return const Center(child: CircularProgressIndicator());
@@ -148,10 +155,12 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                       ),
                       subtitle: Text("Device: ${user.deviceId}"),
                       onTap: () {
+                        debugPrint(
+                          'PROVIDER MAIN: Selected patient '
+                          'id=${user.id} name=${user.displayName}',
+                        );
+
                         context.read<ProviderCubit>().selectUser(user);
-                        if (user.latestEntryDate != null) {
-                          _calendarKey.currentState?.focusOn(user.latestEntryDate!);
-                        }
                       },
                     );
                   },
@@ -219,7 +228,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                                     builder: (_) => BlocProvider.value(
                                       value: context.read<ProviderCubit>(),
                                       child: EnterCounselingPrompts(
-                                        medications: state.demoMedications,
+                                        medications: state.selectedMedications,
                                       ),
                                     ),
                                   ),
@@ -238,10 +247,17 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                       Expanded(
                         child: CalendarWidget(
                           key: _calendarKey,
-                          prompts: state.demoPrompts,
-                          medications: state.demoMedications,
-                          StartDate: selectedUser.startDate ?? DateTime.now(),
-                          externalFocusDay: selectedUser.latestEntryDate,
+
+                          dataOwnerId: selectedUser.id,
+
+                          prompts: state.selectedPrompts,
+                          medications: state.selectedMedications,
+
+                          StartDate:
+                              selectedUser.startDate ?? DateTime.now(),
+
+                          externalFocusDay:
+                              selectedUser.latestEntryDate,
                         ),
                       ),
                     ],
