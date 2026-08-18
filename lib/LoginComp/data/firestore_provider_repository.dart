@@ -404,9 +404,13 @@ class FirestoreProviderRepository implements ProviderRepository {
       'medication=${medication.name}',
     );
 
+    final medicationToSave = medication.startDate == null
+    ? medication.copyWith(startDate: DateTime.now())
+    : medication;
+    
     await reference.set(
       _programData(
-        medication.toJson(),
+        medicationToSave.toJson(),
         creating: true,
       ),
     );
@@ -474,9 +478,13 @@ class FirestoreProviderRepository implements ProviderRepository {
       'patient=$patientId prompt=${prompt.prompt}',
     );
 
+    final promptToSave = prompt.startDate == null
+    ? prompt.copyWith(startDate: DateTime.now())
+    : prompt;
+    
     await reference.set(
       _programData(
-        prompt.toJson(),
+        promptToSave.toJson(),
         creating: true,
       ),
     );

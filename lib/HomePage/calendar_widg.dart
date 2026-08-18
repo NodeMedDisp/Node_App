@@ -130,7 +130,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
   List<CounselingQuestion> _getPromptsForDay(DateTime day) {
     return widget.prompts.where((prompt) {
       final numberOfDays = prompt.numberOfDays;
-      final activityStart = widget.StartDate;
+      final activityStart = prompt.startDate ?? widget.StartDate;
       final activityEnd = activityStart.add(Duration(days: numberOfDays - 1));
 
       final normalizedDay = DateTime(day.year, day.month, day.day);
@@ -147,7 +147,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
       final numDays = medication.numDays;
       if (numDays == 0) return false;
 
-      final medicationStartDay = widget.StartDate;
+      final medicationStartDay = medication.startDate ?? widget.StartDate;
       final lastMedicationDay = medicationStartDay.add(Duration(days: numDays - 1));
 
       final normalizedDay = DateTime(day.year, day.month, day.day);
@@ -157,6 +157,11 @@ class CalendarWidgetState extends State<CalendarWidget> {
       return normalizedDay.isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
           normalizedDay.isBefore(normalizedEnd.add(const Duration(days: 1)));
     }).toList();
+  }
+
+  bool _hasScheduledItemsForDay(DateTime day) {
+    return _getPromptsForDay(day).isNotEmpty ||
+        _getMedicationsForDay(day).isNotEmpty;
   }
 
   void checkBluetoothConnection() async {
@@ -362,13 +367,26 @@ class CalendarWidgetState extends State<CalendarWidget> {
                 availableCalendarFormats: const {CalendarFormat.month: 'Month'},
                 calendarBuilders: CalendarBuilders(
                   todayBuilder: (context, day, focusedDay) {
-                    final normalizedDate = DateTime(day.year, day.month, day.day);
-                    final hasRecovery = recoveryProgress[normalizedDate]?.isNotEmpty ?? false;
+                    final normalizedDate =
+                        DateTime(day.year, day.month, day.day);
+
+                    final hasRecovery =
+                        recoveryProgress[normalizedDate]?.isNotEmpty ?? false;
+
+                    final hasScheduled =
+                        _hasScheduledItemsForDay(normalizedDate);
+
                     return Container(
                       decoration: BoxDecoration(
                         color: hasRecovery
                             ? ColorsManager.mainGreen.withValues(alpha: 0.5)
                             : ColorsManager.mainBlue.withValues(alpha: 0.5),
+                        border: hasScheduled && !hasRecovery
+                            ? Border.all(
+                                color: Colors.purple.withValues(alpha: 0.8),
+                                width: 2.0,
+                              )
+                            : null,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -380,25 +398,16 @@ class CalendarWidgetState extends State<CalendarWidget> {
                     );
                   },
                   defaultBuilder: (context, day, focusedDay) {
-                    final normalizedDate = DateTime(day.year, day.month, day.day);
-                    final isFutureDate = normalizedDate.isAfter(DateTime.now());
-                    final promptsForDay = _getPromptsForDay(normalizedDate);
-                    final medicationsForDay = _getMedicationsForDay(normalizedDate);
-                    if (isFutureDate && (promptsForDay.isNotEmpty || medicationsForDay.isNotEmpty)) {
-                      return Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.purple.withValues(alpha: 0.8), width: 2.0),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            '${day.day}',
-                            style: const TextStyle(color: Colors.black),
-                          ),
-                        ),
-                      );
-                    }
-                    if (recoveryProgress[normalizedDate]?.isNotEmpty ?? false) {
+                    final normalizedDate =
+                        DateTime(day.year, day.month, day.day);
+
+                    final hasRecovery =
+                        recoveryProgress[normalizedDate]?.isNotEmpty ?? false;
+
+                    final hasScheduled =
+                        _hasScheduledItemsForDay(normalizedDate);
+
+                    if (hasRecovery) {
                       return Container(
                         decoration: BoxDecoration(
                           color: ColorsManager.mainGreen.withValues(alpha: 0.5),
@@ -412,16 +421,48 @@ class CalendarWidgetState extends State<CalendarWidget> {
                         ),
                       );
                     }
+
+                    if (hasScheduled) {
+                      return Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Colors.purple.withValues(alpha: 0.8),
+                            width: 2.0,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${day.day}',
+                            style: const TextStyle(color: Colors.black),
+                          ),
+                        ),
+                      );
+                    }
+
                     return null;
                   },
                   selectedBuilder: (context, day, focusedDay) {
-                    final normalizedDate = DateTime(day.year, day.month, day.day);
-                    final hasRecovery = recoveryProgress[normalizedDate]?.isNotEmpty ?? false;
+                    final normalizedDate =
+                        DateTime(day.year, day.month, day.day);
+
+                    final hasRecovery =
+                        recoveryProgress[normalizedDate]?.isNotEmpty ?? false;
+
+                    final hasScheduled =
+                        _hasScheduledItemsForDay(normalizedDate);
+
                     return Container(
                       decoration: BoxDecoration(
                         color: hasRecovery
-                            ? ColorsManager.mainGreen   
+                            ? ColorsManager.mainGreen
                             : ColorsManager.mainBlue,
+                        border: hasScheduled && !hasRecovery
+                            ? Border.all(
+                                color: Colors.purple,
+                                width: 2.0,
+                              )
+                            : null,
                         shape: BoxShape.circle,
                       ),
                       child: Center(

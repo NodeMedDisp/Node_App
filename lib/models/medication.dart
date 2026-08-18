@@ -5,6 +5,7 @@ class Medication {
   final String frequency;
   final String times;
   final int numDays;
+  final DateTime? startDate;
 
   final bool streakEnabled;
   final String streakTitle;
@@ -22,6 +23,7 @@ class Medication {
     required this.frequency,
     required this.times,
     required this.numDays,
+    this.startDate,
     this.streakEnabled = false,
     this.streakTitle = '',
     this.streakThreshold = 'None',
@@ -38,6 +40,7 @@ class Medication {
     String? frequency,
     String? times,
     int? numDays,
+    DateTime? startDate,
     bool? streakEnabled,
     String? streakTitle,
     String? streakThreshold,
@@ -53,6 +56,7 @@ class Medication {
       frequency: frequency ?? this.frequency,
       times: times ?? this.times,
       numDays: numDays ?? this.numDays,
+      startDate: startDate ?? this.startDate,
       streakEnabled: streakEnabled ?? this.streakEnabled,
       streakTitle: streakTitle ?? this.streakTitle,
       streakThreshold: streakThreshold ?? this.streakThreshold,
@@ -70,6 +74,8 @@ class Medication {
       'frequency': frequency,
       'times': times,
       'numDays': numDays,
+      if (startDate != null)
+        'startDate': startDate!.toIso8601String(),
       'streakEnabled': streakEnabled,
       'streakTitle': streakTitle,
       'streakThreshold': streakThreshold,
@@ -91,6 +97,7 @@ class Medication {
       frequency: json['frequency']?.toString() ?? '',
       times: json['times']?.toString() ?? '',
       numDays: _readInt(json['numDays']),
+      startDate: _readDate(json['startDate']),
       streakEnabled: _readBool(json['streakEnabled']),
       streakTitle: json['streakTitle']?.toString() ?? '',
       streakThreshold:
@@ -123,5 +130,17 @@ class Medication {
     }
 
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static DateTime? _readDate(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    return DateTime.tryParse(value.toString());
   }
 }

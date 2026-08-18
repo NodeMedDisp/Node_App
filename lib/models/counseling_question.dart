@@ -4,6 +4,7 @@ class CounselingQuestion {
   final String resReq;
   final List<String> options;
   final int numberOfDays;
+  final DateTime? startDate;
 
   final bool streakEnabled;
   final String streakTitle;
@@ -20,6 +21,7 @@ class CounselingQuestion {
     required this.resReq,
     required this.options,
     required this.numberOfDays,
+    this.startDate,
     this.streakEnabled = false,
     this.streakTitle = '',
     this.streakThreshold = 'None',
@@ -35,6 +37,7 @@ class CounselingQuestion {
     String? resReq,
     List<String>? options,
     int? numberOfDays,
+    DateTime? startDate,
     bool? streakEnabled,
     String? streakTitle,
     String? streakThreshold,
@@ -49,6 +52,7 @@ class CounselingQuestion {
       resReq: resReq ?? this.resReq,
       options: options ?? this.options,
       numberOfDays: numberOfDays ?? this.numberOfDays,
+      startDate: startDate ?? this.startDate,
       streakEnabled: streakEnabled ?? this.streakEnabled,
       streakTitle: streakTitle ?? this.streakTitle,
       streakThreshold: streakThreshold ?? this.streakThreshold,
@@ -65,6 +69,8 @@ class CounselingQuestion {
       'resReq': resReq,
       'options': options,
       'numberOfDays': numberOfDays,
+      if (startDate != null)
+        'startDate': startDate!.toIso8601String(),
       'streakEnabled': streakEnabled,
       'streakTitle': streakTitle,
       'streakThreshold': streakThreshold,
@@ -89,6 +95,7 @@ class CounselingQuestion {
               .toList()
           : <String>[],
       numberOfDays: _readInt(json['numberOfDays']),
+      startDate: _readDate(json['startDate']),
       streakEnabled: _readBool(json['streakEnabled']),
       streakTitle: json['streakTitle']?.toString() ?? '',
       streakThreshold:
@@ -123,5 +130,17 @@ class CounselingQuestion {
     }
 
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static DateTime? _readDate(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    return DateTime.tryParse(value.toString());
   }
 }
