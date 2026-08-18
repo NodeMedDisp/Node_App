@@ -10,6 +10,7 @@ import '../LoginComp/routing/routes.dart';
 import '../Bluetooth/bluetooth_trial.dart';
 import 'enter_medication_data.dart';
 import 'enter_counseling_data.dart';
+import 'provider_program_editor_screen.dart';
 
 class ProviderMainScreen extends StatefulWidget {
   final String? clinicCode;
@@ -241,6 +242,31 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                             ),
                           ),
                         ],
+                      ),
+
+                      SizedBox(height: 12.h),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.edit_note),
+                          label: const Text('View or Edit Full Program'),
+                          onPressed: () {
+                            final providerCubit =
+                                context.read<ProviderCubit>();
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => BlocProvider.value(
+                                  value: providerCubit,
+                                  child:
+                                      const ProviderProgramEditorScreen(),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                       
                       SizedBox(height: 16.h),
