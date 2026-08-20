@@ -12,6 +12,8 @@ import '../LoginComp/theming/colors.dart';
 import 'package:intl/intl.dart';
 import '../models/medication.dart';
 import '../models/counseling_question.dart';
+import '../Bluetooth/recovery_program_file_formatter.dart';
+import '../Bluetooth/node_ble_file_transfer_service.dart';
 
 class RecoverySummaryScreen extends StatefulWidget {
   final List<CounselingQuestion> prompts;
@@ -40,162 +42,43 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
     );
   }
 
-  void _appendRewardSection(
-    StringBuffer buffer, {
-    required String sectionName,
-    required bool enabled,
-    required String title,
-    required String threshold,
-    int? quantity,
-  }) {
-    buffer.writeln('$sectionName: ${enabled ? 'Yes' : 'No'}');
-
-    if (!enabled) {
-      return;
-    }
-
-    buffer.writeln('Title: ${title.trim()}');
-
-    final normalizedThreshold = threshold.trim().isEmpty
-        ? 'None'
-        : threshold.trim();
-
-    buffer.writeln('Threshold: $normalizedThreshold');
-
-    if (sectionName == 'Token') {
-      buffer.writeln('Quantity: ${quantity ?? 0}');
-    }
-  }
-
-  Future<void> _saveDataToFile() async {
+  Future<String> _saveDataToFile() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/user_responses.txt');
 
-      final currentTime =
-          DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-
-      final buffer = StringBuffer();
-
-      buffer.writeln('Current Time: $currentTime');
-      buffer.writeln();
-
-      for (final medication in widget.medications) {
-        buffer.writeln('Medication: ${medication.name}');
-        buffer.writeln('Dose: ${medication.dose}');
-        buffer.writeln('Frequency: ${medication.frequency}');
-        buffer.writeln('Times: ${medication.times}');
-        buffer.writeln('Days: 1 to ${medication.numDays}');
-
-        _appendRewardSection(
-          buffer,
-          sectionName: 'Streak',
-          enabled: medication.streakEnabled,
-          title: medication.streakTitle,
-          threshold: medication.streakThreshold,
-        );
-
-        _appendRewardSection(
-          buffer,
-          sectionName: 'Token',
-          enabled: medication.tokenEnabled,
-          title: medication.tokenTitle,
-          threshold: medication.tokenThreshold,
-          quantity: medication.tokenQuantity,
-        );
-
-        // Blank line ends this medication block.
-        buffer.writeln();
-      }
-
-      for (final prompt in widget.prompts) {
-        buffer.writeln('Prompt: ${prompt.prompt}');
-        buffer.writeln('Required Response: ${prompt.resReq}');
-        buffer.writeln('Options: ${prompt.options.join(', ')}');
-        buffer.writeln('Days: 1 to ${prompt.numberOfDays}');
-
-        _appendRewardSection(
-          buffer,
-          sectionName: 'Streak',
-          enabled: prompt.streakEnabled,
-          title: prompt.streakTitle,
-          threshold: prompt.streakThreshold,
-        );
-
-        _appendRewardSection(
-          buffer,
-          sectionName: 'Token',
-          enabled: prompt.tokenEnabled,
-          title: prompt.tokenTitle,
-          threshold: prompt.tokenThreshold,
-          quantity: prompt.tokenQuantity,
-        );
-
-        // Blank line ends this prompt block.
-        buffer.writeln();
-      }
+      final fileContent = RecoveryProgramFileFormatter.build(
+        medications: widget.medications,
+        prompts: widget.prompts,
+      );
 
       await file.writeAsString(
-        buffer.toString(),
+        fileContent,
         mode: FileMode.write,
         flush: true,
       );
 
-      debugPrint('File saved at: ${file.path}');
-
-      final savedText = await file.readAsString();
-
+      debugPrint('Recovery program saved at: ${file.path}');
       debugPrint('========== SAVED FILE CONTENTS ==========');
-      debugPrint(savedText);
+      debugPrint(fileContent);
       debugPrint('========== END SAVED FILE CONTENTS ==========');
+
+      return fileContent;
     } catch (error, stackTrace) {
-      debugPrint('Error saving data to file: $error');
+      debugPrint('Error saving recovery program: $error');
       debugPrintStack(stackTrace: stackTrace);
       rethrow;
     }
   }
 
-  Future<void> sendFileToDevice(BluetoothDevice device) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/user_responses.txt');
-      if (!await file.exists()) {
-        print("File not found.");
-        return;
-      }
-
-      String fileContent = await file.readAsString();
-      if (fileContent.isEmpty) {
-        print("File is empty.");
-        return;
-      }
-
-      List<BluetoothService> services = await device.discoverServices();
-      for (var service in services) {
-        for (var characteristic in service.characteristics) {
-          if (characteristic.properties.write) {
-            // EOF is a BLE transport marker. It is not stored in the
-            // clean local configuration file.
-            final payload = '${fileContent.trimRight()}\nEOF\n';
-
-            final List<int> bytes = utf8.encode(payload);
-            int chunkSize = 20;
-
-            for (int i = 0; i < bytes.length; i += chunkSize) {
-              List<int> chunk = bytes.sublist(
-                  i,
-                  (i + chunkSize > bytes.length)
-                      ? bytes.length
-                      : i + chunkSize);
-              await characteristic.write(chunk, withoutResponse: false);
-            }
-            print('File sent successfully!');
-          }
-        }
-      }
-    } catch (e) {
-      print('Error sending file: $e');
-    }
+  Future<void> sendFileToDevice(
+    BluetoothDevice device,
+    String fileContent,
+  ) {
+    return const NodeBleFileTransferService().send(
+      device: device,
+      fileContents: fileContent,
+    );
   }
 
   @override
@@ -222,13 +105,13 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
           width: double.infinity,
           child: ElevatedButton(
             onPressed: () async {
-              await _saveDataToFile();
+              final fileContent = await _saveDataToFile();
               print("SUMMARY DEVICE: ${widget.device?.remoteId}");
 
               if (widget.device != null) {
                 print(
                     "BLE mode: sending file to connected device ${widget.device!.remoteId}");
-                await sendFileToDevice(widget.device!);
+                await sendFileToDevice(widget.device!, fileContent);
               } else {
                 print(
                     "ERROR: No BluetoothDevice was passed into RecoverySummaryScreen.");

@@ -11,6 +11,8 @@ import '../Bluetooth/bluetooth_trial.dart';
 import 'enter_medication_data.dart';
 import 'enter_counseling_data.dart';
 import 'provider_program_editor_screen.dart';
+import '../Bluetooth/node_ble_file_transfer_service.dart';
+import '../Bluetooth/recovery_program_file_formatter.dart';
 
 class ProviderMainScreen extends StatefulWidget {
   final String? clinicCode;
@@ -37,9 +39,9 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(context).pop();
-                _navigateToScanner();
+                await _navigateToScanner();
               },
               child: const Text('Pair Device'),
             ),
@@ -49,30 +51,106 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
     );
   }
 
-  void _navigateToScanner() {
-    // 1. Capture the Cubit instance and the current medication data
+  Future<void> _navigateToScanner() async {
     final providerCubit = context.read<ProviderCubit>();
-    final medications = providerCubit.state.selectedMedications;
 
-    Navigator.push(
+    final device = await Navigator.push<BluetoothDevice>(
       context,
       MaterialPageRoute(
-        // 2. Use BlocProvider.value to pass the cubit to the scanner screen
-        builder: (context) => BlocProvider.value(
+        builder: (_) => BlocProvider.value(
           value: providerCubit,
           child: const BLEScannerWidget(),
         ),
-        // 3. Keep passing the medications as arguments for the configuration flow
-        settings: RouteSettings(
-          arguments: {
-            'medications': medications,
-          },
-        ),
       ),
-    ).then((_) {
-      _calendarKey.currentState?.checkBluetoothConnection();
-      setState(() {});
-    });
+    );
+
+    if (!mounted || device == null) {
+      return;
+    }
+
+    await _sendSelectedPatientProgram(device);
+  }
+
+  Future<void> _sendSelectedPatientProgram(
+    BluetoothDevice device,
+  ) async {
+    final state = context.read<ProviderCubit>().state;
+    final selectedPatient = state.selectedUser;
+
+    if (selectedPatient == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Select a patient before configuring NODE.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (state.selectedMedications.isEmpty &&
+        state.selectedPrompts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The selected patient has no recovery program to send.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final fileContent = RecoveryProgramFileFormatter.build(
+      medications: state.selectedMedications,
+      prompts: state.selectedPrompts,
+    );
+
+    debugPrint(
+      'PROVIDER BLE: Sending program '
+      'patient=${selectedPatient.id} '
+      'medications=${state.selectedMedications.length} '
+      'prompts=${state.selectedPrompts.length} '
+      'device=${device.remoteId}',
+    );
+
+    try {
+      await const NodeBleFileTransferService().send(
+        device: device,
+        fileContents: fileContent,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.green,
+          content: Text(
+            '${selectedPatient.displayName} was sent to NODE.',
+          ),
+        ),
+      );
+
+      await _calendarKey.currentState
+          ?.checkBluetoothConnection();
+    } catch (error, stackTrace) {
+      debugPrint('PROVIDER BLE ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text(
+            'Could not configure NODE: $error',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -90,12 +168,17 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                 ? Colors.blue
                 : Colors.grey,
             onPressed: () async {
-              final List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
+              final connectedDevices =
+                  FlutterBluePlus.connectedDevices;
+
               if (connectedDevices.isEmpty) {
                 _showBluetoothDialog();
-              } else {
-                _navigateToScanner();
+                return;
               }
+
+              await _sendSelectedPatientProgram(
+                connectedDevices.first,
+              );
             },
           ),
           IconButton(
