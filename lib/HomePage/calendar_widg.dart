@@ -63,6 +63,154 @@ class CalendarWidgetState extends State<CalendarWidget> {
     }
   }
 
+  bool _hasRewardsForDay(DateTime day) {
+    final promptHasReward = _getPromptsForDay(day).any(
+      (prompt) =>
+          prompt.streakEnabled || prompt.tokenEnabled,
+    );
+
+    final medicationHasReward =
+        _getMedicationsForDay(day).any(
+      (medication) =>
+          medication.streakEnabled ||
+          medication.tokenEnabled,
+    );
+
+    return promptHasReward || medicationHasReward;
+  }
+
+  Widget _calendarDayContent(
+    DateTime day,
+    Color textColor,
+  ) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Center(
+          child: Text(
+            '${day.day}',
+            style: TextStyle(color: textColor),
+          ),
+        ),
+        if (_hasRewardsForDay(day))
+          Positioned(
+            right: 3,
+            bottom: 2,
+            child: Icon(
+              Icons.stars,
+              size: 11,
+              color: Colors.amber.shade700,
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _rewardChips({
+    required bool streakEnabled,
+    required String streakTitle,
+    required String streakThreshold,
+    required bool tokenEnabled,
+    required String tokenTitle,
+    required String tokenThreshold,
+    required int tokenQuantity,
+  }) {
+    final chips = <Widget>[];
+
+    if (streakEnabled) {
+      final title = streakTitle.trim().isEmpty
+          ? 'Streak'
+          : streakTitle.trim();
+
+      chips.add(
+        Tooltip(
+          message: 'Streak threshold: $streakThreshold',
+          child: Chip(
+            avatar: const Icon(
+              Icons.local_fire_department,
+              size: 15,
+            ),
+            label: Text(
+              title,
+              style: TextStyle(fontSize: 10.sp),
+            ),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize:
+                MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      );
+    }
+
+    if (tokenEnabled) {
+      final title = tokenTitle.trim().isEmpty
+          ? 'Token'
+          : tokenTitle.trim();
+
+      chips.add(
+        Tooltip(
+          message: 'Token threshold: $tokenThreshold',
+          child: Chip(
+            avatar: const Icon(
+              Icons.monetization_on,
+              size: 15,
+            ),
+            label: Text(
+              '$tokenQuantity × $title',
+              style: TextStyle(fontSize: 10.sp),
+            ),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize:
+                MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      );
+    }
+
+    return chips;
+  }
+
+  String _rewardDetails({
+    required bool streakEnabled,
+    required String streakTitle,
+    required String streakThreshold,
+    required bool tokenEnabled,
+    required String tokenTitle,
+    required String tokenThreshold,
+    required int tokenQuantity,
+  }) {
+    final lines = <String>[];
+
+    if (streakEnabled) {
+      lines.add(
+        'Streak: '
+        '${streakTitle.trim().isEmpty ? 'Enabled' : streakTitle.trim()}',
+      );
+      lines.add(
+        'Streak threshold: '
+        '${streakThreshold.trim().isEmpty ? 'None' : streakThreshold.trim()}',
+      );
+    }
+
+    if (tokenEnabled) {
+      lines.add(
+        'Token: '
+        '${tokenTitle.trim().isEmpty ? 'Enabled' : tokenTitle.trim()}',
+      );
+      lines.add(
+        'Token threshold: '
+        '${tokenThreshold.trim().isEmpty ? 'None' : tokenThreshold.trim()}',
+      );
+      lines.add('Token quantity: $tokenQuantity');
+    }
+
+    if (lines.isEmpty) {
+      return 'Rewards: None';
+    }
+
+    return 'Rewards:\n${lines.join('\n')}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -164,7 +312,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
         _getMedicationsForDay(day).isNotEmpty;
   }
 
-  void checkBluetoothConnection() async {
+  Future<void> checkBluetoothConnection() async {
     final List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
     if (connectedDevices.isNotEmpty) {
       setState(() {
@@ -389,11 +537,9 @@ class CalendarWidgetState extends State<CalendarWidget> {
                             : null,
                         shape: BoxShape.circle,
                       ),
-                      child: Center(
-                        child: Text(
-                          '${day.day}',
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                      child: _calendarDayContent(
+                        day,
+                        Colors.white,
                       ),
                     );
                   },
@@ -413,11 +559,9 @@ class CalendarWidgetState extends State<CalendarWidget> {
                           color: ColorsManager.mainGreen.withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
-                        child: Center(
-                          child: Text(
-                            '${day.day}',
-                            style: const TextStyle(color: Colors.white),
-                          ),
+                        child: _calendarDayContent(
+                          day,
+                          Colors.white,
                         ),
                       );
                     }
@@ -431,11 +575,9 @@ class CalendarWidgetState extends State<CalendarWidget> {
                           ),
                           shape: BoxShape.circle,
                         ),
-                        child: Center(
-                          child: Text(
-                            '${day.day}',
-                            style: const TextStyle(color: Colors.black),
-                          ),
+                        child: _calendarDayContent(
+                          day,
+                          Colors.black,
                         ),
                       );
                     }
@@ -465,11 +607,9 @@ class CalendarWidgetState extends State<CalendarWidget> {
                             : null,
                         shape: BoxShape.circle,
                       ),
-                      child: Center(
-                        child: Text(
-                          '${day.day}',
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                      child: _calendarDayContent(
+                        day,
+                        Colors.white,
                       ),
                     );
                   },
@@ -533,12 +673,35 @@ class CalendarWidgetState extends State<CalendarWidget> {
                             color: ColorsManager.mainBlue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8.0),
                           ),
-                          child: Center(
-                            child: Text(
-                              prompt.prompt,
-                              style: TextStyle(fontSize: 14.sp),
-                              textAlign: TextAlign.center,
-                            ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                prompt.prompt,
+                                style: TextStyle(fontSize: 14.sp),
+                                textAlign: TextAlign.center,
+                              ),
+                              if (prompt.streakEnabled ||
+                                  prompt.tokenEnabled) ...[
+                                SizedBox(height: 6.h),
+                                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: _rewardChips(
+                                    streakEnabled: prompt.streakEnabled,
+                                    streakTitle: prompt.streakTitle,
+                                    streakThreshold:
+                                        prompt.streakThreshold,
+                                    tokenEnabled: prompt.tokenEnabled,
+                                    tokenTitle: prompt.tokenTitle,
+                                    tokenThreshold:
+                                        prompt.tokenThreshold,
+                                    tokenQuantity: prompt.tokenQuantity,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       );
@@ -570,12 +733,40 @@ class CalendarWidgetState extends State<CalendarWidget> {
                             color: ColorsManager.mainBlue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8.0),
                           ),
-                          child: Center(
-                            child: Text(
-                              medication.name,
-                              style: TextStyle(fontSize: 14.sp),
-                              textAlign: TextAlign.center,
-                            ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                medication.name,
+                                style: TextStyle(fontSize: 14.sp),
+                                textAlign: TextAlign.center,
+                              ),
+                              if (medication.streakEnabled ||
+                                  medication.tokenEnabled) ...[
+                                SizedBox(height: 6.h),
+                                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: _rewardChips(
+                                    streakEnabled:
+                                        medication.streakEnabled,
+                                    streakTitle:
+                                        medication.streakTitle,
+                                    streakThreshold:
+                                        medication.streakThreshold,
+                                    tokenEnabled:
+                                        medication.tokenEnabled,
+                                    tokenTitle:
+                                        medication.tokenTitle,
+                                    tokenThreshold:
+                                        medication.tokenThreshold,
+                                    tokenQuantity:
+                                        medication.tokenQuantity,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       );
@@ -610,7 +801,16 @@ class CalendarWidgetState extends State<CalendarWidget> {
           content: Text(
             "Required Response: ${prompt.resReq}\n"
                 "Response Options: $options\n"
-                "Duration: ${prompt.numberOfDays} day(s)",
+                "Duration: ${prompt.numberOfDays} day(s)\n\n"
+                "${_rewardDetails(
+                  streakEnabled: prompt.streakEnabled,
+                  streakTitle: prompt.streakTitle,
+                  streakThreshold: prompt.streakThreshold,
+                  tokenEnabled: prompt.tokenEnabled,
+                  tokenTitle: prompt.tokenTitle,
+                  tokenThreshold: prompt.tokenThreshold,
+                  tokenQuantity: prompt.tokenQuantity,
+                )}",
           ),
           actions: [
             TextButton(
@@ -634,7 +834,16 @@ class CalendarWidgetState extends State<CalendarWidget> {
             "Frequency: ${medication.frequency}\n"
             "Dose: ${medication.dose}\n"
             "Times: ${medication.times}\n"
-            "Duration: ${medication.numDays} day(s)",
+            "Duration: ${medication.numDays} day(s)\n\n"
+            "${_rewardDetails(
+              streakEnabled: medication.streakEnabled,
+              streakTitle: medication.streakTitle,
+              streakThreshold: medication.streakThreshold,
+              tokenEnabled: medication.tokenEnabled,
+              tokenTitle: medication.tokenTitle,
+              tokenThreshold: medication.tokenThreshold,
+              tokenQuantity: medication.tokenQuantity,
+            )}",
           ),
           actions: [
             TextButton(

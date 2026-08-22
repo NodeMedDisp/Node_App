@@ -401,7 +401,6 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
       final statuses = await [
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
-        Permission.bluetoothAdvertise,
         Permission.locationWhenInUse,
       ].request();
 
@@ -414,7 +413,6 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
 
       debugPrint("SCAN: ${statuses[Permission.bluetoothScan]}");
       debugPrint("CONNECT: ${statuses[Permission.bluetoothConnect]}");
-      debugPrint("ADVERTISE: ${statuses[Permission.bluetoothAdvertise]}");
       debugPrint("LOCATION: ${statuses[Permission.locationWhenInUse]}");
 
       return bluetoothScanGranted && bluetoothConnectGranted && locationGranted;
