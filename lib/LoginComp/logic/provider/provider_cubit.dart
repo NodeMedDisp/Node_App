@@ -12,14 +12,11 @@ import 'provider_user.dart';
 class ProviderCubit extends Cubit<ProviderState> {
   final ProviderRepository repository;
 
-  StreamSubscription<List<ProviderUser>>?
-      _patientsSubscription;
+  StreamSubscription<List<ProviderUser>>? _patientsSubscription;
 
-  StreamSubscription<List<Medication>>?
-      _medicationsSubscription;
+  StreamSubscription<List<Medication>>? _medicationsSubscription;
 
-  StreamSubscription<List<CounselingQuestion>>?
-      _promptsSubscription;
+  StreamSubscription<List<CounselingQuestion>>? _promptsSubscription;
 
   String? _clinicId;
   String? _watchedPatientId;
@@ -31,8 +28,7 @@ class ProviderCubit extends Cubit<ProviderState> {
   Future<void> loadClinicData(String? clinicCode) async {
     final normalizedClinicId = clinicCode?.trim();
 
-    if (normalizedClinicId == null ||
-        normalizedClinicId.isEmpty) {
+    if (normalizedClinicId == null || normalizedClinicId.isEmpty) {
       emit(
         state.copyWith(
           loading: false,
@@ -46,8 +42,7 @@ class ProviderCubit extends Cubit<ProviderState> {
       return;
     }
 
-    if (_clinicId == normalizedClinicId &&
-        _patientsSubscription != null) {
+    if (_clinicId == normalizedClinicId && _patientsSubscription != null) {
       debugPrint(
         'PROVIDER CUBIT: Clinic already loaded; '
         'skipping duplicate load',
@@ -80,9 +75,8 @@ class ProviderCubit extends Cubit<ProviderState> {
         normalizedClinicId,
       );
 
-      _patientsSubscription = repository
-          .watchPatients(normalizedClinicId)
-          .listen(
+      _patientsSubscription =
+          repository.watchPatients(normalizedClinicId).listen(
         _handlePatientSnapshot,
         onError: (
           Object error,
@@ -104,8 +98,7 @@ class ProviderCubit extends Cubit<ProviderState> {
       emit(
         state.copyWith(
           loading: false,
-          errorMessage:
-              'Could not load clinic data: $error',
+          errorMessage: 'Could not load clinic data: $error',
         ),
       );
     }
@@ -196,13 +189,12 @@ class ProviderCubit extends Cubit<ProviderState> {
 
     _medicationsSubscription = repository
         .watchMedications(
-          clinicId: clinicId,
-          patientId: user.id,
-        )
+      clinicId: clinicId,
+      patientId: user.id,
+    )
         .listen(
       (medications) {
-        if (isClosed ||
-            state.selectedUser?.id != user.id) {
+        if (isClosed || state.selectedUser?.id != user.id) {
           return;
         }
 
@@ -232,13 +224,12 @@ class ProviderCubit extends Cubit<ProviderState> {
 
     _promptsSubscription = repository
         .watchPrompts(
-          clinicId: clinicId,
-          patientId: user.id,
-        )
+      clinicId: clinicId,
+      patientId: user.id,
+    )
         .listen(
       (prompts) {
-        if (isClosed ||
-            state.selectedUser?.id != user.id) {
+        if (isClosed || state.selectedUser?.id != user.id) {
           return;
         }
 
@@ -381,8 +372,7 @@ class ProviderCubit extends Cubit<ProviderState> {
       latestEntryDate: DateTime.now(),
     );
 
-    final createdPatient =
-        await _executeMutation<ProviderUser>(
+    final createdPatient = await _executeMutation<ProviderUser>(
       'create patient',
       () => repository.createPatient(
         clinicId: _requireClinicId(),
@@ -400,8 +390,7 @@ class ProviderCubit extends Cubit<ProviderState> {
     required List<Medication> medications,
     List<CounselingQuestion> prompts = const [],
   }) async {
-    final result =
-        await _executeMutation<PatientImportResult>(
+    final result = await _executeMutation<PatientImportResult>(
       'import patient from device',
       () => repository.importPatientFromDevice(
         clinicId: _requireClinicId(),
@@ -507,8 +496,7 @@ class ProviderCubit extends Cubit<ProviderState> {
       emit(
         state.copyWith(
           loading: false,
-          errorMessage:
-              'Could not load $streamName: $error',
+          errorMessage: 'Could not load $streamName: $error',
         ),
       );
     }
