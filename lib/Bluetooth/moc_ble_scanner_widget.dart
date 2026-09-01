@@ -7,7 +7,6 @@ import '../GetStarted/get_started.dart';
 class MockBLEScannerWidget extends StatelessWidget {
   const MockBLEScannerWidget({Key? key}) : super(key: key);
 
-
   @override
   Widget build(BuildContext context) {
     final mockDevice = MockBluetoothDevice(
@@ -25,7 +24,8 @@ class MockBLEScannerWidget extends StatelessWidget {
               MaterialPageRoute(
                 builder: (context) => const GetStartedPage(
                   device: null,
-                  isMockDevice: true, // This tells GetStartedPage to simulate a device
+                  isMockDevice:
+                      true, // This tells GetStartedPage to simulate a device
                 ),
               ),
             );

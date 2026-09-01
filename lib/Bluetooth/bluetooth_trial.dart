@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-
 class BLEScannerWidget extends StatefulWidget {
   const BLEScannerWidget({super.key});
 
@@ -109,68 +108,67 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
   }
 
   Future<void> startScanning() async {
-      final adapterState = await FlutterBluePlus.adapterState.first;
+    final adapterState = await FlutterBluePlus.adapterState.first;
 
-      debugPrint("DEBUG: Bluetooth adapter state: $adapterState");
+    debugPrint("DEBUG: Bluetooth adapter state: $adapterState");
 
-      if (adapterState != BluetoothAdapterState.on) {
-        if (!mounted) return;
+    if (adapterState != BluetoothAdapterState.on) {
+      if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please turn Bluetooth on.")),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please turn Bluetooth on.")),
+      );
+      return;
+    }
+
+    await scanResultsSubscription?.cancel();
+    await isScanningSubscription?.cancel();
+
+    scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
+      debugPrint("DEBUG: Scan results count: ${results.length}");
+
+      for (final result in results) {
+        debugPrint(
+          "DEBUG: Found device: "
+          "platformName='${result.device.platformName}', "
+          "advName='${result.advertisementData.advName}', "
+          "remoteId='${result.device.remoteId}', "
+          "rssi='${result.rssi}', "
+          "serviceUuids='${result.advertisementData.serviceUuids}'",
         );
-        return;
       }
-
-      await scanResultsSubscription?.cancel();
-      await isScanningSubscription?.cancel();
-
-      scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
-        debugPrint("DEBUG: Scan results count: ${results.length}");
-
-        for (final result in results) {
-          debugPrint(
-            "DEBUG: Found device: "
-            "platformName='${result.device.platformName}', "
-            "advName='${result.advertisementData.advName}', "
-            "remoteId='${result.device.remoteId}', "
-            "rssi='${result.rssi}', "
-            "serviceUuids='${result.advertisementData.serviceUuids}'",
-          );
-        }
-
-        if (!mounted) return;
-
-        setState(() {
-          scanResults = results;
-        });
-      });
-
-      isScanningSubscription = FlutterBluePlus.isScanning.listen((scanning) {
-        if (!mounted) return;
-
-        setState(() {
-          isScanning = scanning;
-        });
-      });
 
       if (!mounted) return;
 
       setState(() {
-        isScanning = true;
-        scanResults.clear();
+        scanResults = results;
       });
+    });
 
-      debugPrint("DEBUG: Starting BLE scan...");
-      debugPrint("SCAN: ${await Permission.bluetoothScan.status}");
-      debugPrint("CONNECT: ${await Permission.bluetoothConnect.status}");
-      debugPrint("ADVERTISE: ${await Permission.bluetoothAdvertise.status}");
+    isScanningSubscription = FlutterBluePlus.isScanning.listen((scanning) {
+      if (!mounted) return;
 
-      await FlutterBluePlus.startScan(
-        timeout: const Duration(seconds: 30),
-      );
-    }
-  
+      setState(() {
+        isScanning = scanning;
+      });
+    });
+
+    if (!mounted) return;
+
+    setState(() {
+      isScanning = true;
+      scanResults.clear();
+    });
+
+    debugPrint("DEBUG: Starting BLE scan...");
+    debugPrint("SCAN: ${await Permission.bluetoothScan.status}");
+    debugPrint("CONNECT: ${await Permission.bluetoothConnect.status}");
+    debugPrint("ADVERTISE: ${await Permission.bluetoothAdvertise.status}");
+
+    await FlutterBluePlus.startScan(
+      timeout: const Duration(seconds: 30),
+    );
+  }
 
   void stopScanning() {
     FlutterBluePlus.stopScan();
@@ -394,33 +392,32 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
 
   ///Request Bluetooth
   Future<bool> requestBluetoothPermissions() async {
-      if (!Platform.isAndroid) {
-        return true;
-      }
-
-      final statuses = await [
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-        Permission.locationWhenInUse,
-      ].request();
-
-      final bluetoothScanGranted =
-          statuses[Permission.bluetoothScan]?.isGranted ?? false;
-      final bluetoothConnectGranted =
-          statuses[Permission.bluetoothConnect]?.isGranted ?? false;
-      final locationGranted =
-          statuses[Permission.locationWhenInUse]?.isGranted ?? false;
-
-      debugPrint("SCAN: ${statuses[Permission.bluetoothScan]}");
-      debugPrint("CONNECT: ${statuses[Permission.bluetoothConnect]}");
-      debugPrint("LOCATION: ${statuses[Permission.locationWhenInUse]}");
-
-      return bluetoothScanGranted && bluetoothConnectGranted && locationGranted;
+    if (!Platform.isAndroid) {
+      return true;
     }
+
+    final statuses = await [
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.locationWhenInUse,
+    ].request();
+
+    final bluetoothScanGranted =
+        statuses[Permission.bluetoothScan]?.isGranted ?? false;
+    final bluetoothConnectGranted =
+        statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+    final locationGranted =
+        statuses[Permission.locationWhenInUse]?.isGranted ?? false;
+
+    debugPrint("SCAN: ${statuses[Permission.bluetoothScan]}");
+    debugPrint("CONNECT: ${statuses[Permission.bluetoothConnect]}");
+    debugPrint("LOCATION: ${statuses[Permission.locationWhenInUse]}");
+
+    return bluetoothScanGranted && bluetoothConnectGranted && locationGranted;
+  }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Device Configuration'),
@@ -473,33 +470,36 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
             */
           Expanded(
             child: scanResults.isEmpty
-                ? Center(child: Text(isScanning ? 'Scanning for devices...' : 'No devices found'))
+                ? Center(
+                    child: Text(isScanning
+                        ? 'Scanning for devices...'
+                        : 'No devices found'))
                 : ListView.builder(
-              itemCount: scanResults.length,
-              itemBuilder: (context, index) {
-                final device = scanResults[index].device;
-                //final isConnected = connectedDevice?.remoteId == device.remoteId;
+                    itemCount: scanResults.length,
+                    itemBuilder: (context, index) {
+                      final device = scanResults[index].device;
+                      //final isConnected = connectedDevice?.remoteId == device.remoteId;
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        child: ListTile(
+                          title: Text(
+                            device.platformName.isNotEmpty
+                                ? device.platformName
+                                : 'Unknown Device',
+                          ),
+                          subtitle: Text(device.remoteId.toString()),
+                          trailing: ElevatedButton(
+                            onPressed: () => connectToDevice(device),
+                            child: const Text('Connect'),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                  child: ListTile(
-                    title: Text(
-                      device.platformName.isNotEmpty
-                          ? device.platformName
-                          : 'Unknown Device',
-                    ),
-                    subtitle: Text(device.remoteId.toString()),
-                    trailing: ElevatedButton(
-                      onPressed: () => connectToDevice(device),
-                      child: const Text('Connect'),
-                    ),
-                  ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -510,4 +510,3 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
     );
   }
 }
-

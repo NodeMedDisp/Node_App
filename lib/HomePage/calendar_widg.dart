@@ -21,9 +21,9 @@ import '../models/counseling_question.dart';
 class CalendarWidget extends StatefulWidget {
   final List<CounselingQuestion> prompts;
   final List<Medication> medications;
-  final DateTime StartDate; 
-  final DateTime? externalFocusDay; 
-  final Map<DateTime, List<Map<String, dynamic>>>? externalRecoveryProgress; 
+  final DateTime StartDate;
+  final DateTime? externalFocusDay;
+  final Map<DateTime, List<Map<String, dynamic>>>? externalRecoveryProgress;
 
   /// Identifies whose data is currently being displayed.
   /// For provider mode this is the selected Firestore patient ID.
@@ -34,8 +34,8 @@ class CalendarWidget extends StatefulWidget {
     required this.prompts,
     required this.medications,
     required this.StartDate,
-    this.externalFocusDay, 
-    this.externalRecoveryProgress, 
+    this.externalFocusDay,
+    this.externalRecoveryProgress,
     this.dataOwnerId,
   });
 
@@ -46,11 +46,11 @@ class CalendarWidget extends StatefulWidget {
 class CalendarWidgetState extends State<CalendarWidget> {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
-  bool isBluetoothConnected = false; 
-  BluetoothCharacteristic? fileCharacteristic; 
-  String fileContent = ""; 
+  bool isBluetoothConnected = false;
+  BluetoothCharacteristic? fileCharacteristic;
+  String fileContent = "";
 
-  Map<DateTime, List<Map<String, dynamic>>> recoveryProgress = {}; 
+  Map<DateTime, List<Map<String, dynamic>>> recoveryProgress = {};
 
   String _formatProgressEntry(Map<String, dynamic> entry) {
     switch (entry["type"]) {
@@ -65,15 +65,11 @@ class CalendarWidgetState extends State<CalendarWidget> {
 
   bool _hasRewardsForDay(DateTime day) {
     final promptHasReward = _getPromptsForDay(day).any(
-      (prompt) =>
-          prompt.streakEnabled || prompt.tokenEnabled,
+      (prompt) => prompt.streakEnabled || prompt.tokenEnabled,
     );
 
-    final medicationHasReward =
-        _getMedicationsForDay(day).any(
-      (medication) =>
-          medication.streakEnabled ||
-          medication.tokenEnabled,
+    final medicationHasReward = _getMedicationsForDay(day).any(
+      (medication) => medication.streakEnabled || medication.tokenEnabled,
     );
 
     return promptHasReward || medicationHasReward;
@@ -118,9 +114,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
     final chips = <Widget>[];
 
     if (streakEnabled) {
-      final title = streakTitle.trim().isEmpty
-          ? 'Streak'
-          : streakTitle.trim();
+      final title = streakTitle.trim().isEmpty ? 'Streak' : streakTitle.trim();
 
       chips.add(
         Tooltip(
@@ -135,17 +129,14 @@ class CalendarWidgetState extends State<CalendarWidget> {
               style: TextStyle(fontSize: 10.sp),
             ),
             visualDensity: VisualDensity.compact,
-            materialTapTargetSize:
-                MaterialTapTargetSize.shrinkWrap,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
       );
     }
 
     if (tokenEnabled) {
-      final title = tokenTitle.trim().isEmpty
-          ? 'Token'
-          : tokenTitle.trim();
+      final title = tokenTitle.trim().isEmpty ? 'Token' : tokenTitle.trim();
 
       chips.add(
         Tooltip(
@@ -160,8 +151,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
               style: TextStyle(fontSize: 10.sp),
             ),
             visualDensity: VisualDensity.compact,
-            materialTapTargetSize:
-                MaterialTapTargetSize.shrinkWrap,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
       );
@@ -240,33 +230,31 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   @override
-    void didUpdateWidget(covariant CalendarWidget oldWidget) {
-      super.didUpdateWidget(oldWidget);
+  void didUpdateWidget(covariant CalendarWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
-      final patientChanged =
-          oldWidget.dataOwnerId != widget.dataOwnerId;
+    final patientChanged = oldWidget.dataOwnerId != widget.dataOwnerId;
 
-      if (patientChanged) {
-        debugPrint(
-          'CALENDAR: Data owner changed '
-          '${oldWidget.dataOwnerId} -> ${widget.dataOwnerId}',
+    if (patientChanged) {
+      debugPrint(
+        'CALENDAR: Data owner changed '
+        '${oldWidget.dataOwnerId} -> ${widget.dataOwnerId}',
+      );
+
+      _focusedDay = widget.externalFocusDay ?? widget.StartDate;
+      _selectedDay = _focusedDay;
+
+      // Provider patients should not inherit another patient's
+      // locally-held recovery progress.
+      recoveryProgress.clear();
+
+      if (widget.externalRecoveryProgress != null) {
+        recoveryProgress.addAll(
+          widget.externalRecoveryProgress!,
         );
-
-        _focusedDay =
-            widget.externalFocusDay ?? widget.StartDate;
-        _selectedDay = _focusedDay;
-
-        // Provider patients should not inherit another patient's
-        // locally-held recovery progress.
-        recoveryProgress.clear();
-
-        if (widget.externalRecoveryProgress != null) {
-          recoveryProgress.addAll(
-            widget.externalRecoveryProgress!,
-          );
-        }
       }
     }
+  }
 
   void focusOn(DateTime day) {
     setState(() {
@@ -282,10 +270,13 @@ class CalendarWidgetState extends State<CalendarWidget> {
       final activityEnd = activityStart.add(Duration(days: numberOfDays - 1));
 
       final normalizedDay = DateTime(day.year, day.month, day.day);
-      final normalizedStart = DateTime(activityStart.year, activityStart.month, activityStart.day);
-      final normalizedEnd = DateTime(activityEnd.year, activityEnd.month, activityEnd.day);
+      final normalizedStart =
+          DateTime(activityStart.year, activityStart.month, activityStart.day);
+      final normalizedEnd =
+          DateTime(activityEnd.year, activityEnd.month, activityEnd.day);
 
-      return normalizedDay.isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
+      return normalizedDay
+              .isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
           normalizedDay.isBefore(normalizedEnd.add(const Duration(days: 1)));
     }).toList();
   }
@@ -296,13 +287,17 @@ class CalendarWidgetState extends State<CalendarWidget> {
       if (numDays == 0) return false;
 
       final medicationStartDay = medication.startDate ?? widget.StartDate;
-      final lastMedicationDay = medicationStartDay.add(Duration(days: numDays - 1));
+      final lastMedicationDay =
+          medicationStartDay.add(Duration(days: numDays - 1));
 
       final normalizedDay = DateTime(day.year, day.month, day.day);
-      final normalizedStart = DateTime(medicationStartDay.year, medicationStartDay.month, medicationStartDay.day);
-      final normalizedEnd = DateTime(lastMedicationDay.year, lastMedicationDay.month, lastMedicationDay.day);
+      final normalizedStart = DateTime(medicationStartDay.year,
+          medicationStartDay.month, medicationStartDay.day);
+      final normalizedEnd = DateTime(lastMedicationDay.year,
+          lastMedicationDay.month, lastMedicationDay.day);
 
-      return normalizedDay.isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
+      return normalizedDay
+              .isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
           normalizedDay.isBefore(normalizedEnd.add(const Duration(days: 1)));
     }).toList();
   }
@@ -313,22 +308,25 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   Future<void> checkBluetoothConnection() async {
-    final List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
+    final List<BluetoothDevice> connectedDevices =
+        FlutterBluePlus.connectedDevices;
     if (connectedDevices.isNotEmpty) {
       setState(() {
-        isBluetoothConnected = true; 
+        isBluetoothConnected = true;
       });
       await _discoverServices(connectedDevices.first);
     } else {
       setState(() {
-        isBluetoothConnected = false; 
+        isBluetoothConnected = false;
       });
     }
   }
 
-  Future<void> _saveRecoveryProgress(DateTime date, List<Map<String, dynamic>> progress) async {
+  Future<void> _saveRecoveryProgress(
+      DateTime date, List<Map<String, dynamic>> progress) async {
     final box = Hive.box<Map>('calendarData');
-    final formattedDate = DateTime(date.year, date.month, date.day).toIso8601String();
+    final formattedDate =
+        DateTime(date.year, date.month, date.day).toIso8601String();
     final uniqueProgress = progress.toSet().toList();
     box.put(formattedDate, {'progress': uniqueProgress});
   }
@@ -340,7 +338,8 @@ class CalendarWidgetState extends State<CalendarWidget> {
       final data = box.get(key);
       if (data != null && data['progress'] != null) {
         final date = DateTime.parse(key as String);
-        recoveryProgress[date] = List<Map<String, dynamic>>.from(data['progress']);
+        recoveryProgress[date] =
+            List<Map<String, dynamic>>.from(data['progress']);
       }
     }
   }
@@ -386,7 +385,8 @@ class CalendarWidgetState extends State<CalendarWidget> {
         continue;
       }
       if (currentDate == null || line.isEmpty) continue;
-      final normalizedDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
+      final normalizedDate =
+          DateTime(currentDate.year, currentDate.month, currentDate.day);
       final existing = recoveryProgress[normalizedDate] ?? [];
       Map<String, dynamic>? parsedEntry;
       if (line.startsWith("Medication Taken:")) {
@@ -397,12 +397,19 @@ class CalendarWidgetState extends State<CalendarWidget> {
         final parts = withoutPrefix.split("Response:");
         final question = parts[0].trim();
         final response = parts.length > 1 ? parts[1].trim() : "";
-        parsedEntry = {"type": "prompt", "question": question, "response": response};
+        parsedEntry = {
+          "type": "prompt",
+          "question": question,
+          "response": response
+        };
       }
       if (parsedEntry != null) {
         if (!existing.any((e) => mapEquals(e, parsedEntry))) {
-          recoveryProgress.putIfAbsent(normalizedDate, () => []).add(parsedEntry);
-          _saveRecoveryProgress(normalizedDate, recoveryProgress[normalizedDate]!);
+          recoveryProgress
+              .putIfAbsent(normalizedDate, () => [])
+              .add(parsedEntry);
+          _saveRecoveryProgress(
+              normalizedDate, recoveryProgress[normalizedDate]!);
         }
       }
     }
@@ -411,21 +418,20 @@ class CalendarWidgetState extends State<CalendarWidget> {
   List<Map<String, dynamic>> _getRecoveryProgressForDay(DateTime day) {
     final normalizedDate = DateTime(day.year, day.month, day.day);
     if (recoveryProgress.containsKey(normalizedDate)) {
-      return recoveryProgress[normalizedDate]!.toSet().toList(); 
+      return recoveryProgress[normalizedDate]!.toSet().toList();
     }
     return [];
   }
 
   @override
   Widget build(BuildContext context) {
-
     debugPrint(
       'CALENDAR BUILD: '
       'owner=${widget.dataOwnerId} '
       'medications=${widget.medications.length} '
       'prompts=${widget.prompts.length}',
     );
-    
+
     final promptsForDay = _getPromptsForDay(_selectedDay);
     final medicationsForDay = _getMedicationsForDay(_selectedDay);
     final recoveryProgressForDay = _getRecoveryProgressForDay(_selectedDay);
@@ -451,7 +457,8 @@ class CalendarWidgetState extends State<CalendarWidget> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const GetStartedPage()),
+                          MaterialPageRoute(
+                              builder: (_) => const GetStartedPage()),
                         );
                       },
                       child: const Text('Go to Setup'),
@@ -467,7 +474,9 @@ class CalendarWidgetState extends State<CalendarWidget> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => cubit != null
-                                ? BlocProvider.value(value: cubit, child: const EnterPrescriptionData())
+                                ? BlocProvider.value(
+                                    value: cubit,
+                                    child: const EnterPrescriptionData())
                                 : const EnterPrescriptionData(),
                           ),
                         );
@@ -485,14 +494,18 @@ class CalendarWidgetState extends State<CalendarWidget> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => cubit != null
-                                ? BlocProvider.value(value: cubit, child: const EnterCounselingPrompts(medications: <Medication>[]))
-                                : const EnterCounselingPrompts(medications: <Medication>[]),
+                                ? BlocProvider.value(
+                                    value: cubit,
+                                    child: const EnterCounselingPrompts(
+                                        medications: <Medication>[]))
+                                : const EnterCounselingPrompts(
+                                    medications: <Medication>[]),
                           ),
                         );
                       },
                       child: const Text(
                         'Counseling',
-                        textAlign: TextAlign.center, 
+                        textAlign: TextAlign.center,
                         softWrap: true,
                       ),
                     ),
@@ -670,7 +683,8 @@ class CalendarWidgetState extends State<CalendarWidget> {
                           width: (MediaQuery.of(context).size.width - 40) / 3,
                           padding: const EdgeInsets.all(8.0),
                           decoration: BoxDecoration(
-                            color: ColorsManager.mainBlue.withValues(alpha: 0.2),
+                            color:
+                                ColorsManager.mainBlue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8.0),
                           ),
                           child: Column(
@@ -691,12 +705,10 @@ class CalendarWidgetState extends State<CalendarWidget> {
                                   children: _rewardChips(
                                     streakEnabled: prompt.streakEnabled,
                                     streakTitle: prompt.streakTitle,
-                                    streakThreshold:
-                                        prompt.streakThreshold,
+                                    streakThreshold: prompt.streakThreshold,
                                     tokenEnabled: prompt.tokenEnabled,
                                     tokenTitle: prompt.tokenTitle,
-                                    tokenThreshold:
-                                        prompt.tokenThreshold,
+                                    tokenThreshold: prompt.tokenThreshold,
                                     tokenQuantity: prompt.tokenQuantity,
                                   ),
                                 ),
@@ -725,12 +737,14 @@ class CalendarWidgetState extends State<CalendarWidget> {
                     runSpacing: 10.0,
                     children: medicationsForDay.map((medication) {
                       return GestureDetector(
-                        onTap: () => _showMedicationDetails(context, medication),
+                        onTap: () =>
+                            _showMedicationDetails(context, medication),
                         child: Container(
                           width: (MediaQuery.of(context).size.width - 40) / 3,
                           padding: const EdgeInsets.all(8.0),
                           decoration: BoxDecoration(
-                            color: ColorsManager.mainBlue.withValues(alpha: 0.2),
+                            color:
+                                ColorsManager.mainBlue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8.0),
                           ),
                           child: Column(
@@ -749,20 +763,13 @@ class CalendarWidgetState extends State<CalendarWidget> {
                                   spacing: 4,
                                   runSpacing: 4,
                                   children: _rewardChips(
-                                    streakEnabled:
-                                        medication.streakEnabled,
-                                    streakTitle:
-                                        medication.streakTitle,
-                                    streakThreshold:
-                                        medication.streakThreshold,
-                                    tokenEnabled:
-                                        medication.tokenEnabled,
-                                    tokenTitle:
-                                        medication.tokenTitle,
-                                    tokenThreshold:
-                                        medication.tokenThreshold,
-                                    tokenQuantity:
-                                        medication.tokenQuantity,
+                                    streakEnabled: medication.streakEnabled,
+                                    streakTitle: medication.streakTitle,
+                                    streakThreshold: medication.streakThreshold,
+                                    tokenEnabled: medication.tokenEnabled,
+                                    tokenTitle: medication.tokenTitle,
+                                    tokenThreshold: medication.tokenThreshold,
+                                    tokenQuantity: medication.tokenQuantity,
                                   ),
                                 ),
                               ],
@@ -800,17 +807,17 @@ class CalendarWidgetState extends State<CalendarWidget> {
           title: Text(prompt.prompt),
           content: Text(
             "Required Response: ${prompt.resReq}\n"
-                "Response Options: $options\n"
-                "Duration: ${prompt.numberOfDays} day(s)\n\n"
-                "${_rewardDetails(
-                  streakEnabled: prompt.streakEnabled,
-                  streakTitle: prompt.streakTitle,
-                  streakThreshold: prompt.streakThreshold,
-                  tokenEnabled: prompt.tokenEnabled,
-                  tokenTitle: prompt.tokenTitle,
-                  tokenThreshold: prompt.tokenThreshold,
-                  tokenQuantity: prompt.tokenQuantity,
-                )}",
+            "Response Options: $options\n"
+            "Duration: ${prompt.numberOfDays} day(s)\n\n"
+            "${_rewardDetails(
+              streakEnabled: prompt.streakEnabled,
+              streakTitle: prompt.streakTitle,
+              streakThreshold: prompt.streakThreshold,
+              tokenEnabled: prompt.tokenEnabled,
+              tokenTitle: prompt.tokenTitle,
+              tokenThreshold: prompt.tokenThreshold,
+              tokenQuantity: prompt.tokenQuantity,
+            )}",
           ),
           actions: [
             TextButton(
@@ -823,8 +830,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
     );
   }
 
-  void _showMedicationDetails(
-      BuildContext context, Medication medication) {
+  void _showMedicationDetails(BuildContext context, Medication medication) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -860,7 +866,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
 }
 
 Future<File> _getRecoveryDataFile() async {
-  final directory = await getApplicationDocumentsDirectory(); 
+  final directory = await getApplicationDocumentsDirectory();
   return File('${directory.path}/recovery_data.txt');
 }
 

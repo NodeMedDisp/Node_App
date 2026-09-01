@@ -29,12 +29,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: OfflineBuilder(
         connectivityBuilder: (
-            BuildContext context,
-            List<ConnectivityResult> connectivity,
-            Widget child,
-            ) {
+          BuildContext context,
+          List<ConnectivityResult> connectivity,
+          Widget child,
+        ) {
           final bool connected = connectivity.any(
-                (result) => result != ConnectivityResult.none,
+            (result) => result != ConnectivityResult.none,
           );
           return connected ? _homePage(context) : const BuildNoInternet();
         },

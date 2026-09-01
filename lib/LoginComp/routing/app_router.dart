@@ -89,10 +89,9 @@ class AppRouter {
 
         final clinicCode = args?['clinicCode'] as String?;
 
-        final normalizedClinicId =
-            clinicCode?.trim().isNotEmpty == true
-                ? clinicCode!.trim()
-                : 'demo-clinic';
+        final normalizedClinicId = clinicCode?.trim().isNotEmpty == true
+            ? clinicCode!.trim()
+            : 'demo-clinic';
 
         debugPrint(
           'ROUTER: Opening provider clinic=$normalizedClinicId',

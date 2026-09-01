@@ -1,4 +1,3 @@
-
 import 'package:gap/gap.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -23,7 +22,8 @@ class PrescriptionQuestionScreen extends StatefulWidget {
       _PrescriptionQuestionScreenState();
 }
 
-class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen> {
+class _PrescriptionQuestionScreenState
+    extends State<PrescriptionQuestionScreen> {
   String? selectedOption;
 
   @override
@@ -74,7 +74,8 @@ class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => EnterPrescriptionData(device: widget.device), 
+                        builder: (context) =>
+                            EnterPrescriptionData(device: widget.device),
                       ),
                     );
                   },
@@ -82,9 +83,9 @@ class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen>
                     minimumSize: Size(double.infinity, 50.h),
                   ),
                   child: Text(
-                      'Continue',
-                    style:
-                    TextStyles.font14Hint500Weight.copyWith(color: ColorsManager.mainBlue),
+                    'Continue',
+                    style: TextStyles.font14Hint500Weight
+                        .copyWith(color: ColorsManager.mainBlue),
                   ),
                 ),
             ],

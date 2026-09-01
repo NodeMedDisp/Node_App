@@ -95,8 +95,7 @@ class RecoveryProgramFileFormatter {
 
     buffer.writeln('Title: ${title.trim()}');
 
-    final cleanThreshold =
-        threshold.trim().isEmpty ? 'None' : threshold.trim();
+    final cleanThreshold = threshold.trim().isEmpty ? 'None' : threshold.trim();
 
     buffer.writeln('Threshold: $cleanThreshold');
 

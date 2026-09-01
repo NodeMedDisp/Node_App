@@ -30,7 +30,7 @@ class CreatePassword extends StatelessWidget {
       body: SafeArea(
         child: Padding(
           padding:
-          EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
+              EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
           child: Column(
             children: [
               Expanded(
@@ -68,7 +68,7 @@ class CreatePassword extends StatelessWidget {
                             if (!context.mounted) return;
                             Navigator.of(context).pushNamedAndRemoveUntil(
                               Routes.homeScreen,
-                                  (Route<dynamic> route) => false,
+                              (Route<dynamic> route) => false,
                               arguments: {
                                 'prompts': const <CounselingQuestion>[],
                                 'medications': const <Medication>[],

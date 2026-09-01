@@ -42,12 +42,9 @@ class ProviderUser {
       'displayName': displayName,
       'deviceId': deviceId,
       'source': source,
-      'startDate': startDate == null
-          ? null
-          : Timestamp.fromDate(startDate!),
-      'latestEntryDate': latestEntryDate == null
-          ? null
-          : Timestamp.fromDate(latestEntryDate!),
+      'startDate': startDate == null ? null : Timestamp.fromDate(startDate!),
+      'latestEntryDate':
+          latestEntryDate == null ? null : Timestamp.fromDate(latestEntryDate!),
     };
   }
 
@@ -57,8 +54,7 @@ class ProviderUser {
   ) {
     return ProviderUser(
       id: documentId,
-      displayName:
-          data['displayName']?.toString() ?? 'Unnamed Patient',
+      displayName: data['displayName']?.toString() ?? 'Unnamed Patient',
       deviceId: data['deviceId']?.toString() ?? '',
       source: data['source']?.toString() ?? 'manual',
       startDate: _readDate(data['startDate']),

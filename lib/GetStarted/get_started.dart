@@ -24,7 +24,7 @@ class GetStartedPage extends StatefulWidget {
 
 class _GetStartedPageState extends State<GetStartedPage> {
   final RiveAnimationControllerHelper riveHelper =
-  RiveAnimationControllerHelper();
+      RiveAnimationControllerHelper();
 
   @override
   void initState() {
@@ -82,9 +82,9 @@ class _GetStartedPageState extends State<GetStartedPage> {
                     height: maxHeight * 0.35,
                     child: riveHelper.riveArtboard != null
                         ? rive.Rive(
-                      artboard: riveHelper.riveArtboard!,
-                      fit: BoxFit.contain,
-                    )
+                            artboard: riveHelper.riveArtboard!,
+                            fit: BoxFit.contain,
+                          )
                         : const Center(child: CircularProgressIndicator()),
                   ),
 

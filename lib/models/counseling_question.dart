@@ -69,8 +69,7 @@ class CounselingQuestion {
       'resReq': resReq,
       'options': options,
       'numberOfDays': numberOfDays,
-      if (startDate != null)
-        'startDate': startDate!.toIso8601String(),
+      if (startDate != null) 'startDate': startDate!.toIso8601String(),
       'streakEnabled': streakEnabled,
       'streakTitle': streakTitle,
       'streakThreshold': streakThreshold,
@@ -90,9 +89,7 @@ class CounselingQuestion {
       prompt: json['prompt']?.toString() ?? '',
       resReq: json['resReq']?.toString() ?? '',
       options: json['options'] is List
-          ? (json['options'] as List)
-              .map((item) => item.toString())
-              .toList()
+          ? (json['options'] as List).map((item) => item.toString()).toList()
           : <String>[],
       numberOfDays: _readInt(json['numberOfDays']),
       startDate: _readDate(json['startDate']),
@@ -119,9 +116,7 @@ class CounselingQuestion {
 
     final normalized = value?.toString().trim().toLowerCase();
 
-    return normalized == 'true' ||
-        normalized == 'yes' ||
-        normalized == '1';
+    return normalized == 'true' || normalized == 'yes' || normalized == '1';
   }
 
   static int _readInt(dynamic value) {

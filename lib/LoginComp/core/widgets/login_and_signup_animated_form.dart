@@ -41,7 +41,7 @@ class _EmailAndPasswordState extends State<EmailAndPassword> {
   TextEditingController emailController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
   TextEditingController passwordConfirmationController =
-  TextEditingController();
+      TextEditingController();
 
   final formKey = GlobalKey<FormState>();
 
@@ -167,9 +167,9 @@ class _EmailAndPasswordState extends State<EmailAndPassword> {
         passwordFocuseNode.unfocus();
         if (formKey.currentState!.validate()) {
           context.read<AuthCubit>().signInWithEmail(
-            emailController.text,
-            passwordController.text,
-          );
+                emailController.text,
+                passwordController.text,
+              );
         }
       },
     );
@@ -219,11 +219,11 @@ class _EmailAndPasswordState extends State<EmailAndPassword> {
         passwordConfirmationFocuseNode.unfocus();
         if (formKey.currentState!.validate()) {
           context.read<AuthCubit>().createAccountAndLinkItWithGoogleAccount(
-            nameController.text,
-            passwordController.text,
-            widget.googleUser!,
-            widget.credential!,
-          );
+                nameController.text,
+                passwordController.text,
+                widget.googleUser!,
+                widget.credential!,
+              );
         }
       },
     );
@@ -308,10 +308,10 @@ class _EmailAndPasswordState extends State<EmailAndPassword> {
         passwordConfirmationFocuseNode.unfocus();
         if (formKey.currentState!.validate()) {
           context.read<AuthCubit>().signUpWithEmail(
-            nameController.text,
-            emailController.text,
-            passwordController.text,
-          );
+                nameController.text,
+                emailController.text,
+                passwordController.text,
+              );
         }
       },
     );

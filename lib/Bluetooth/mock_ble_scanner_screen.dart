@@ -40,7 +40,8 @@ class _MockBLEScannerScreenState extends State<MockBLEScannerScreen> {
     String configData = _formatMedicationData(patientMeds);
 
     // --- TEST LINE: PRINT TO CONSOLE ---
-    debugPrint("DEBUG: Sending the following config to $deviceName:\n$configData");
+    debugPrint(
+        "DEBUG: Sending the following config to $deviceName:\n$configData");
 
     // 2. Send the specific text file to the device via the BLE service
     await mockBLE.writeToDevice(configData);
@@ -78,7 +79,8 @@ class _MockBLEScannerScreenState extends State<MockBLEScannerScreen> {
   @override
   Widget build(BuildContext context) {
     // Extract the patient medications passed from ProviderMainScreen
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final List<dynamic> patientMeds = args?['medications'] ?? [];
 
     return Scaffold(
@@ -95,8 +97,7 @@ class _MockBLEScannerScreenState extends State<MockBLEScannerScreen> {
                   : "Scanning for device to configure...",
               style: TextStyle(
                   color: patientMeds.isEmpty ? Colors.red : Colors.black54,
-                  fontWeight: FontWeight.bold
-              ),
+                  fontWeight: FontWeight.bold),
             ),
           ),
           ElevatedButton.icon(
@@ -113,7 +114,8 @@ class _MockBLEScannerScreenState extends State<MockBLEScannerScreen> {
                 return ListTile(
                   title: Text(device),
                   subtitle: const Text("Tap to pair and configure"),
-                  trailing: const Icon(Icons.bluetooth_connected, color: Colors.blue),
+                  trailing:
+                      const Icon(Icons.bluetooth_connected, color: Colors.blue),
                   onTap: () => connectToDevice(device, patientMeds),
                 );
               },

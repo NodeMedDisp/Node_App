@@ -12,7 +12,6 @@ import '../models/medication.dart';
 
 class EnterPrescriptionData extends StatefulWidget {
   final BluetoothDevice? device;
-  
 
   const EnterPrescriptionData({super.key, this.device});
 
@@ -26,7 +25,8 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
   final TextEditingController _daysController = TextEditingController();
   final TextEditingController _streakTitleController = TextEditingController();
   final TextEditingController _tokenTitleController = TextEditingController();
-  final TextEditingController _tokenQuantityController = TextEditingController(text: '1');
+  final TextEditingController _tokenQuantityController =
+      TextEditingController(text: '1');
 
   bool _streakEnabled = false;
   bool _tokenEnabled = false;
@@ -42,8 +42,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     final medicationName = _medicationController.text.trim();
     final dose = _doseController.text.trim();
     final numberOfDays = int.tryParse(_daysController.text.trim());
-    final tokenQuantity =
-        int.tryParse(_tokenQuantityController.text.trim());
+    final tokenQuantity = int.tryParse(_tokenQuantityController.text.trim());
 
     if (medicationName.isEmpty) {
       _showError('Enter a medication name.');
@@ -72,20 +71,17 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
       return;
     }
 
-    if (_streakEnabled &&
-        _streakTitleController.text.trim().isEmpty) {
+    if (_streakEnabled && _streakTitleController.text.trim().isEmpty) {
       _showError('Enter a title for the medication streak.');
       return;
     }
 
-    if (_tokenEnabled &&
-        _tokenTitleController.text.trim().isEmpty) {
+    if (_tokenEnabled && _tokenTitleController.text.trim().isEmpty) {
       _showError('Enter a title for the medication tokens.');
       return;
     }
 
-    if (_tokenEnabled &&
-        (tokenQuantity == null || tokenQuantity <= 0)) {
+    if (_tokenEnabled && (tokenQuantity == null || tokenQuantity <= 0)) {
       _showError('Enter a token quantity greater than zero.');
       return;
     }
@@ -104,14 +100,11 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
 
       // Medication rewards happen when the medication event occurs.
       streakEnabled: _streakEnabled,
-      streakTitle: _streakEnabled
-          ? _streakTitleController.text.trim()
-          : '',
+      streakTitle: _streakEnabled ? _streakTitleController.text.trim() : '',
       streakThreshold: 'None',
 
       tokenEnabled: _tokenEnabled,
-      tokenTitle:
-          _tokenEnabled ? _tokenTitleController.text.trim() : '',
+      tokenTitle: _tokenEnabled ? _tokenTitleController.text.trim() : '',
       tokenThreshold: 'None',
       tokenQuantity: _tokenEnabled ? tokenQuantity! : 0,
     );
@@ -155,8 +148,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
         }
 
         setState(() {
-          _errorMessage =
-              'Could not save medication: $error';
+          _errorMessage = 'Could not save medication: $error';
         });
       }
 
@@ -204,7 +196,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     }
   }
 
-    Widget _buildMedicationRewardSection({
+  Widget _buildMedicationRewardSection({
     required String rewardName,
     required bool enabled,
     required ValueChanged<bool> onEnabledChanged,
@@ -271,17 +263,17 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     );
   }
 
-   @override
-    void dispose() {
-      _medicationController.dispose();
-      _doseController.dispose();
-      _daysController.dispose();
-      _streakTitleController.dispose();
-      _tokenTitleController.dispose();
-      _tokenQuantityController.dispose();
-      super.dispose();
-    }
-    
+  @override
+  void dispose() {
+    _medicationController.dispose();
+    _doseController.dispose();
+    _daysController.dispose();
+    _streakTitleController.dispose();
+    _tokenTitleController.dispose();
+    _tokenQuantityController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Hide the list and continue button if we're in the provider dashboard
@@ -431,7 +423,6 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 ),
               ),
               SizedBox(height: 20.h),
-
               _buildMedicationRewardSection(
                 rewardName: 'streak',
                 enabled: _streakEnabled,
@@ -442,7 +433,6 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 },
                 titleController: _streakTitleController,
               ),
-
               _buildMedicationRewardSection(
                 rewardName: 'token reward',
                 enabled: _tokenEnabled,
@@ -454,7 +444,6 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 titleController: _tokenTitleController,
                 quantityController: _tokenQuantityController,
               ),
-
               if (_errorMessage != null) ...[
                 Padding(
                   padding: EdgeInsets.only(bottom: 12.h),

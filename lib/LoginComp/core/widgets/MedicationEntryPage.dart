@@ -100,7 +100,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                 ),
                 focusedBorder: const OutlineInputBorder(
                   borderSide:
-                  BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                      BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                 ),
               ),
             ),
@@ -120,7 +120,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                 ),
                 focusedBorder: const OutlineInputBorder(
                   borderSide:
-                  BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                      BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                 ),
               ),
             ),
@@ -142,7 +142,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                 ),
                 focusedBorder: const OutlineInputBorder(
                   borderSide:
-                  BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                      BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                 ),
               ),
               value: _frequency,
@@ -153,7 +153,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                 'Custom'
               ]
                   .map((freq) =>
-                  DropdownMenuItem(value: freq, child: Text(freq)))
+                      DropdownMenuItem(value: freq, child: Text(freq)))
                   .toList(),
               onChanged: (value) {
                 setState(() {
@@ -177,8 +177,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                   }
 
                   if (_selectedTimes.length >= _numTimesPerDay) {
-                    _selectedTimes =
-                        _selectedTimes.sublist(0, _numTimesPerDay);
+                    _selectedTimes = _selectedTimes.sublist(0, _numTimesPerDay);
                   } else {
                     _selectedTimes = [
                       ..._selectedTimes,
@@ -239,7 +238,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                 ),
                 focusedBorder: const OutlineInputBorder(
                   borderSide:
-                  BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                      BorderSide(color: ColorsManager.mainBlue, width: 2.0),
                 ),
               ),
             ),
@@ -264,8 +263,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                       name: _medicationController.text.trim(),
                       dose: _doseController.text.trim(),
                       frequency: _frequency ?? '',
-                      numDays:
-                          int.tryParse(_daysController.text.trim()) ?? 0,
+                      numDays: int.tryParse(_daysController.text.trim()) ?? 0,
                       times: times.join(', '),
                     );
                   } else {
@@ -273,8 +271,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
                       name: _medicationController.text.trim(),
                       dose: _doseController.text.trim(),
                       frequency: _frequency ?? '',
-                      numDays:
-                          int.tryParse(_daysController.text.trim()) ?? 0,
+                      numDays: int.tryParse(_daysController.text.trim()) ?? 0,
                       times: times.join(', '),
                     );
                   }

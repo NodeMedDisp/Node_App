@@ -63,7 +63,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '771585564836',
     projectId: 'nodeapp2-27252',
     storageBucket: 'nodeapp2-27252.firebasestorage.app',
-    androidClientId: '771585564836-96m8j3vt7vn6pvh4032ghor95sm8g9et.apps.googleusercontent.com',
+    androidClientId:
+        '771585564836-96m8j3vt7vn6pvh4032ghor95sm8g9et.apps.googleusercontent.com',
     iosBundleId: 'com.example.nodeApp2',
   );
   static const FirebaseOptions macos = FirebaseOptions(
@@ -72,7 +73,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '771585564836',
     projectId: 'nodeapp2-27252',
     storageBucket: 'nodeapp2-27252.firebasestorage.app',
-    androidClientId: '771585564836-96m8j3vt7vn6pvh4032ghor95sm8g9et.apps.googleusercontent.com',
+    androidClientId:
+        '771585564836-96m8j3vt7vn6pvh4032ghor95sm8g9et.apps.googleusercontent.com',
     iosBundleId: 'com.example.nodeApp2',
   );
 

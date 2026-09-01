@@ -98,12 +98,9 @@ class NodeBleFileTransferService {
     Object uuid,
     String shortUuid,
   ) {
-    final normalized = uuid
-        .toString()
-        .toLowerCase()
-        .replaceAll(RegExp('[^0-9a-f]'), '');
+    final normalized =
+        uuid.toString().toLowerCase().replaceAll(RegExp('[^0-9a-f]'), '');
 
-    return normalized == shortUuid ||
-        normalized.startsWith('0000$shortUuid');
+    return normalized == shortUuid || normalized.startsWith('0000$shortUuid');
   }
 }

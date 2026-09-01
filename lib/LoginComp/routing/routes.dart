@@ -7,5 +7,4 @@ class Routes {
   static const String createPassword = "/createPassword";
   static const String homeScreen = "/homeScreen";
   static const String providerMain = '/providerMain';
-
 }

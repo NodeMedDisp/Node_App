@@ -43,12 +43,10 @@ class ProviderState extends Equatable {
     return ProviderState(
       loading: loading ?? this.loading,
       saving: saving ?? this.saving,
-      errorMessage:
-          clearError ? null : errorMessage ?? this.errorMessage,
+      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       users: users ?? this.users,
-      selectedUser: clearSelectedUser
-          ? null
-          : selectedUser ?? this.selectedUser,
+      selectedUser:
+          clearSelectedUser ? null : selectedUser ?? this.selectedUser,
       recoveryMap: recoveryMap ?? this.recoveryMap,
       selectedMedications: selectedMedications ?? this.selectedMedications,
       selectedPrompts: selectedPrompts ?? this.selectedPrompts,

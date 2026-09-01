@@ -90,8 +90,7 @@ class _MedicationList extends StatelessWidget {
                   MaterialPageRoute(
                     builder: (_) => BlocProvider.value(
                       value: cubit,
-                      child:
-                          const EnterPrescriptionData(),
+                      child: const EnterPrescriptionData(),
                     ),
                   ),
                 );
@@ -107,13 +106,10 @@ class _MedicationList extends StatelessWidget {
                   ),
                 )
               : ListView.separated(
-                  itemCount:
-                      state.selectedMedications.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1),
+                  itemCount: state.selectedMedications.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final medication =
-                        state.selectedMedications[index];
+                    final medication = state.selectedMedications[index];
 
                     return ListTile(
                       title: Text(medication.name),
@@ -123,12 +119,10 @@ class _MedicationList extends StatelessWidget {
                         '${medication.times}',
                       ),
                       onTap: () async {
-                        final updated =
-                            await Navigator.push<Medication>(
+                        final updated = await Navigator.push<Medication>(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                MedicationEntryPage(
+                            builder: (_) => MedicationEntryPage(
                               medication: medication,
                             ),
                           ),
@@ -138,8 +132,7 @@ class _MedicationList extends StatelessWidget {
                           return;
                         }
 
-                        await cubit
-                            .updateMedicationForSelectedUser(
+                        await cubit.updateMedicationForSelectedUser(
                           updated.copyWith(
                             id: medication.id,
                           ),
@@ -152,8 +145,7 @@ class _MedicationList extends StatelessWidget {
                         onPressed: medication.id == null
                             ? null
                             : () async {
-                                await cubit
-                                    .deleteMedicationFromSelectedUser(
+                                await cubit.deleteMedicationFromSelectedUser(
                                   medication.id!,
                                 );
                               },
@@ -186,8 +178,7 @@ class _PromptList extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.add),
-              label:
-                  const Text('Add Counseling Question'),
+              label: const Text('Add Counseling Question'),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -195,8 +186,7 @@ class _PromptList extends StatelessWidget {
                     builder: (_) => BlocProvider.value(
                       value: cubit,
                       child: EnterCounselingPrompts(
-                        medications:
-                            state.selectedMedications,
+                        medications: state.selectedMedications,
                       ),
                     ),
                   ),
@@ -214,11 +204,9 @@ class _PromptList extends StatelessWidget {
                 )
               : ListView.separated(
                   itemCount: state.selectedPrompts.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1),
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final prompt =
-                        state.selectedPrompts[index];
+                    final prompt = state.selectedPrompts[index];
 
                     return ListTile(
                       title: Text(prompt.prompt),
@@ -233,8 +221,7 @@ class _PromptList extends StatelessWidget {
                         onPressed: prompt.id == null
                             ? null
                             : () async {
-                                await cubit
-                                    .deletePromptFromSelectedUser(
+                                await cubit.deletePromptFromSelectedUser(
                                   prompt.id!,
                                 );
                               },

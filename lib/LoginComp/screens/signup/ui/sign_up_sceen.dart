@@ -29,7 +29,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
+          padding:
+              EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -22,12 +22,14 @@ class ProviderMainScreen extends StatefulWidget {
 }
 
 class _ProviderMainScreenState extends State<ProviderMainScreen> {
-  final GlobalKey<CalendarWidgetState> _calendarKey = GlobalKey<CalendarWidgetState>();
+  final GlobalKey<CalendarWidgetState> _calendarKey =
+      GlobalKey<CalendarWidgetState>();
 
   Future<void> _showCreatePatientDialog() async {
     final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController();
-    final deviceIdController = TextEditingController();
+
+    String displayName = '';
+    String deviceId = '';
 
     final shouldCreate = await showDialog<bool>(
       context: context,
@@ -41,7 +43,6 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextFormField(
-                    controller: nameController,
                     autofocus: true,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
@@ -49,6 +50,9 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                       hintText: 'Enter the patient name',
                       border: OutlineInputBorder(),
                     ),
+                    onChanged: (value) {
+                      displayName = value.trim();
+                    },
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Enter the patient name.';
@@ -59,12 +63,14 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                   ),
                   SizedBox(height: 12.h),
                   TextFormField(
-                    controller: deviceIdController,
                     decoration: const InputDecoration(
                       labelText: 'Device ID',
                       hintText: 'Optional',
                       border: OutlineInputBorder(),
                     ),
+                    onChanged: (value) {
+                      deviceId = value.trim();
+                    },
                   ),
                 ],
               ),
@@ -92,20 +98,24 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
       },
     );
 
-    final displayName = nameController.text.trim();
-    final deviceId = deviceIdController.text.trim();
-
-    nameController.dispose();
-    deviceIdController.dispose();
-
     if (shouldCreate != true || !mounted) {
       return;
     }
 
     try {
+      debugPrint(
+        'PROVIDER UI: Creating patient '
+        'name=$displayName device=$deviceId',
+      );
+
       await context.read<ProviderCubit>().createPatient(
-        displayName: displayName,
-        deviceId: deviceId,
+            displayName: displayName,
+            deviceId: deviceId,
+          );
+
+      debugPrint(
+        'PROVIDER UI: createPatient completed successfully '
+        'name=$displayName',
       );
 
       if (!mounted) {
@@ -119,8 +129,14 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
         ),
       );
     } catch (error, stackTrace) {
-      debugPrint('PROVIDER CREATE PATIENT ERROR: $error');
-      debugPrintStack(stackTrace: stackTrace);
+      debugPrint(
+        'PROVIDER CREATE PATIENT ERROR: '
+        '${error.runtimeType}: $error',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
 
       if (!mounted) {
         return;
@@ -199,8 +215,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
       return;
     }
 
-    if (state.selectedMedications.isEmpty &&
-        state.selectedPrompts.isEmpty) {
+    if (state.selectedMedications.isEmpty && state.selectedPrompts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -243,8 +258,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
         ),
       );
 
-      await _calendarKey.currentState
-          ?.checkBluetoothConnection();
+      await _calendarKey.currentState?.checkBluetoothConnection();
     } catch (error, stackTrace) {
       debugPrint('PROVIDER BLE ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -279,8 +293,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                 ? Colors.blue
                 : Colors.grey,
             onPressed: () async {
-              final connectedDevices =
-                  FlutterBluePlus.connectedDevices;
+              final connectedDevices = FlutterBluePlus.connectedDevices;
 
               if (connectedDevices.isEmpty) {
                 _showBluetoothDialog();
@@ -311,11 +324,10 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
             final users = state.users;
             final selectedUser = state.selectedUser;
 
-            final selectedUserId =
-                selectedUser != null &&
-                        users.any((user) => user.id == selectedUser.id)
-                    ? selectedUser.id
-                    : null;
+            final selectedUserId = selectedUser != null &&
+                    users.any((user) => user.id == selectedUser.id)
+                ? selectedUser.id
+                : null;
 
             debugPrint(
               'PROVIDER MAIN BUILD: '
@@ -333,156 +345,149 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // PATIENT DROPDOWN AND CREATE-PATIENT BUTTON
+                // ---------------------------------------------------------
+                // PATIENT DROPDOWN
+                // ---------------------------------------------------------
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Patient',
+                    prefixIcon: Icon(Icons.person_outline),
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedUserId,
+                      isExpanded: true,
+                      hint: Text(
+                        users.isEmpty ? 'No patients yet' : 'Select a patient',
+                      ),
+
+                      // This controls how the selected patient is displayed
+                      // while the dropdown is CLOSED.
+                      selectedItemBuilder: (context) {
+                        return users.map((user) {
+                          return Align(
+                            alignment: Alignment.centerLeft,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                user.displayName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList();
+                      },
+
+                      // This controls the entries while the dropdown is OPEN.
+                      items: users.map((user) {
+                        return DropdownMenuItem<String>(
+                          value: user.id,
+                          child: Text(
+                            user.displayName,
+                          ),
+                        );
+                      }).toList(),
+
+                      onChanged: users.isEmpty
+                          ? null
+                          : (patientId) {
+                              if (patientId == null) {
+                                return;
+                              }
+
+                              final patient = users.firstWhere(
+                                (user) => user.id == patientId,
+                              );
+
+                              debugPrint(
+                                'PROVIDER MAIN: Selected patient '
+                                'id=${patient.id} '
+                                'name=${patient.displayName}',
+                              );
+
+                              context.read<ProviderCubit>().selectUser(patient);
+                            },
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 12.h),
+
+                // ---------------------------------------------------------
+                // PATIENT ACTIONS
+                // ---------------------------------------------------------
                 Row(
                   children: [
                     Expanded(
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Patient',
-                          prefixIcon: Icon(Icons.person_outline),
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
+                      child: FilledButton.icon(
+                        onPressed: _showCreatePatientDialog,
+                        icon: const Icon(
+                          Icons.person_add_alt_1,
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedUserId,
-                            isExpanded: true,
-                            hint: Text(
-                              users.isEmpty
-                                  ? 'No patients yet'
-                                  : 'Select a patient',
-                            ),
-                            items: users.map((user) {
-                              final deviceDescription =
-                                  user.deviceId.trim().isEmpty
-                                      ? ''
-                                      : ' — ${user.deviceId}';
+                        label: const Text(
+                          'Create Patient',
+                        ),
+                      ),
+                    ),
+                    if (selectedUser != null) ...[
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(
+                            Icons.edit_note,
+                          ),
+                          label: const Text(
+                            'View or Edit Full Program',
+                          ),
+                          onPressed: () {
+                            final providerCubit = context.read<ProviderCubit>();
 
-                              return DropdownMenuItem<String>(
-                                value: user.id,
-                                child: Text(
-                                  '${user.displayName}$deviceDescription',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => BlocProvider.value(
+                                  value: providerCubit,
+                                  child: const ProviderProgramEditorScreen(),
                                 ),
-                              );
-                            }).toList(),
-                            onChanged: users.isEmpty
-                                ? null
-                                : (patientId) {
-                                    if (patientId == null) {
-                                      return;
-                                    }
-
-                                    final patient = users.firstWhere(
-                                      (user) => user.id == patientId,
-                                    );
-
-                                    debugPrint(
-                                      'PROVIDER MAIN: Selected patient '
-                                      'id=${patient.id} '
-                                      'name=${patient.displayName}',
-                                    );
-
-                                    context
-                                        .read<ProviderCubit>()
-                                        .selectUser(patient);
-                                  },
-                          ),
+                              ),
+                            );
+                          },
                         ),
                       ),
-                    ),
-                    SizedBox(width: 12.w),
-                    FilledButton.icon(
-                      onPressed: _showCreatePatientDialog,
-                      icon: const Icon(Icons.person_add_alt_1),
-                      label: const Text('Create Patient'),
-                      style: FilledButton.styleFrom(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 16.w,
-                          vertical: 18.h,
-                        ),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
 
                 SizedBox(height: 16.h),
 
+                // ---------------------------------------------------------
+                // CALENDAR
+                // ---------------------------------------------------------
                 Expanded(
                   child: selectedUser == null
                       ? Center(
                           child: Text(
                             users.isEmpty
                                 ? 'Create your first patient to begin.'
-                                : 'Select a patient to view their recovery calendar.',
+                                : 'Select a patient above.',
                             textAlign: TextAlign.center,
                           ),
                         )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // SELECTED PATIENT HEADER AND PROGRAM EDITOR
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Viewing: ${selectedUser.displayName}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 20.sp,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(width: 12.w),
-                                OutlinedButton.icon(
-                                  icon: const Icon(Icons.edit_note),
-                                  label: const Text(
-                                    'View or Edit Full Program',
-                                  ),
-                                  onPressed: () {
-                                    final providerCubit =
-                                        context.read<ProviderCubit>();
-
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            BlocProvider.value(
-                                          value: providerCubit,
-                                          child: const
-                                              ProviderProgramEditorScreen(),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-
-                            SizedBox(height: 16.h),
-
-                            // SELECTED PATIENT CALENDAR
-                            Expanded(
-                              child: CalendarWidget(
-                                key: _calendarKey,
-                                dataOwnerId: selectedUser.id,
-                                prompts: state.selectedPrompts,
-                                medications: state.selectedMedications,
-                                StartDate:
-                                    selectedUser.startDate ??
-                                        DateTime.now(),
-                                externalFocusDay:
-                                    selectedUser.latestEntryDate,
-                              ),
-                            ),
-                          ],
+                      : CalendarWidget(
+                          key: _calendarKey,
+                          dataOwnerId: selectedUser.id,
+                          prompts: state.selectedPrompts,
+                          medications: state.selectedMedications,
+                          StartDate: selectedUser.startDate ?? DateTime.now(),
+                          externalFocusDay: selectedUser.latestEntryDate,
                         ),
                 ),
               ],

@@ -347,15 +347,50 @@ class FirestoreProviderRepository implements ProviderRepository {
 
     debugPrint(
       'FIRESTORE: Creating patient '
+      'clinic=$clinicId '
       'id=${reference.id} '
       'name=${createdPatient.displayName}',
     );
 
-    await reference.set(
-      _patientData(createdPatient, creating: true),
-    );
+    try {
+      await reference.set(
+        _patientData(
+          createdPatient,
+          creating: true,
+        ),
+      );
 
-    return createdPatient;
+      debugPrint(
+        'FIRESTORE: Patient created successfully '
+        'clinic=$clinicId '
+        'id=${reference.id} '
+        'name=${createdPatient.displayName}',
+      );
+
+      return createdPatient;
+    } on FirebaseException catch (error, stackTrace) {
+      debugPrint(
+        'FIRESTORE CREATE PATIENT ERROR: '
+        'code=${error.code} '
+        'message=${error.message}',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
+
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint(
+        'FIRESTORE CREATE PATIENT UNKNOWN ERROR: $error',
+      );
+
+      debugPrintStack(
+        stackTrace: stackTrace,
+      );
+
+      rethrow;
+    }
   }
 
   @override

@@ -25,10 +25,13 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
   final TextEditingController _promptController = TextEditingController();
   final TextEditingController _daysController = TextEditingController();
   final TextEditingController _streakTitleController = TextEditingController();
-  final TextEditingController _streakThresholdController = TextEditingController();
+  final TextEditingController _streakThresholdController =
+      TextEditingController();
   final TextEditingController _tokenTitleController = TextEditingController();
-  final TextEditingController _tokenThresholdController = TextEditingController();
-  final TextEditingController _tokenQuantityController = TextEditingController(text: '1');
+  final TextEditingController _tokenThresholdController =
+      TextEditingController();
+  final TextEditingController _tokenQuantityController =
+      TextEditingController(text: '1');
 
   bool _streakEnabled = false;
   bool _tokenEnabled = false;
@@ -44,7 +47,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
   List<CounselingQuestion> prompts = [];
   String? _errorMessage;
 
-    Future<void> _addPrompt() async {
+  Future<void> _addPrompt() async {
     final promptText = _promptController.text.trim();
     final numberOfDays = int.tryParse(_daysController.text.trim());
 
@@ -64,8 +67,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
 
     if (_responseRequired == 'Yes' && _responseType == null) {
       setState(() {
-        _errorMessage =
-            'Select a response type: Yes/No or 1-10 Scale.';
+        _errorMessage = 'Select a response type: Yes/No or 1-10 Scale.';
       });
       return;
     }
@@ -108,11 +110,9 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
 
     final List<String> options;
 
-    if (_responseRequired == 'Yes' &&
-        _responseType == 'Yes/No') {
+    if (_responseRequired == 'Yes' && _responseType == 'Yes/No') {
       options = ['Yes', 'No'];
-    } else if (_responseRequired == 'Yes' &&
-        _responseType == '1-10 Scale') {
+    } else if (_responseRequired == 'Yes' && _responseType == '1-10 Scale') {
       options = List.generate(
         10,
         (index) => (index + 1).toString(),
@@ -138,22 +138,14 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
       resReq: _responseRequired,
       options: options,
       numberOfDays: numberOfDays,
-
       streakEnabled: _streakEnabled,
-      streakTitle: _streakEnabled
-          ? _streakTitleController.text.trim()
-          : '',
-      streakThreshold:
-          _streakEnabled ? streakThreshold : 'None',
-
+      streakTitle: _streakEnabled ? _streakTitleController.text.trim() : '',
+      streakThreshold: _streakEnabled ? streakThreshold : 'None',
       tokenEnabled: _tokenEnabled,
-      tokenTitle:
-          _tokenEnabled ? _tokenTitleController.text.trim() : '',
-      tokenThreshold:
-          _tokenEnabled ? tokenThreshold : 'None',
-      tokenQuantity: _tokenEnabled
-          ? int.parse(_tokenQuantityController.text.trim())
-          : 0,
+      tokenTitle: _tokenEnabled ? _tokenTitleController.text.trim() : '',
+      tokenThreshold: _tokenEnabled ? tokenThreshold : 'None',
+      tokenQuantity:
+          _tokenEnabled ? int.parse(_tokenQuantityController.text.trim()) : 0,
     );
 
     ProviderCubit? providerCubit;
@@ -195,8 +187,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
         }
 
         setState(() {
-          _errorMessage =
-              'Could not save prompt: $error';
+          _errorMessage = 'Could not save prompt: $error';
         });
       }
 
@@ -279,16 +270,13 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                 controller: titleController,
                 decoration: InputDecoration(
                   labelText: isToken ? 'Token Title' : 'Streak Title',
-                  hintText: isToken
-                      ? 'Example: Staying Calm'
-                      : 'Example: Low Stress',
+                  hintText:
+                      isToken ? 'Example: Staying Calm' : 'Example: Low Stress',
                   border: const OutlineInputBorder(),
                 ),
               ),
               SizedBox(height: 12.h),
-
-              if (_responseRequired == 'Yes' &&
-                  _responseType == '1-10 Scale')
+              if (_responseRequired == 'Yes' && _responseType == '1-10 Scale')
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -332,8 +320,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     ),
                   ],
                 )
-              else if (_responseRequired == 'Yes' &&
-                  _responseType == 'Yes/No')
+              else if (_responseRequired == 'Yes' && _responseType == 'Yes/No')
                 DropdownButtonFormField<String>(
                   value: yesNoThreshold,
                   decoration: const InputDecoration(
@@ -367,7 +354,6 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   'Select the required response and response type above.',
                   style: TextStyle(color: Colors.orange),
                 ),
-
               if (isToken) ...[
                 SizedBox(height: 12.h),
                 TextField(
@@ -398,14 +384,12 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
       return 'None';
     }
 
-    if (_responseRequired == 'Yes' &&
-        _responseType == 'Yes/No') {
+    if (_responseRequired == 'Yes' && _responseType == 'Yes/No') {
       // The demo format uses "Threshold: No", rather than "=No".
       return yesNoThreshold;
     }
 
-    if (_responseRequired == 'Yes' &&
-        _responseType == '1-10 Scale') {
+    if (_responseRequired == 'Yes' && _responseType == '1-10 Scale') {
       return '$operatorValue${numericController.text.trim()}';
     }
 
@@ -427,10 +411,8 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
       return 'Enter a title for the $rewardName.';
     }
 
-    if (_responseRequired == 'Yes' &&
-        _responseType == '1-10 Scale') {
-      final threshold =
-          int.tryParse(numericThresholdController.text.trim());
+    if (_responseRequired == 'Yes' && _responseType == '1-10 Scale') {
+      final threshold = int.tryParse(numericThresholdController.text.trim());
 
       if (threshold == null || threshold < 1 || threshold > 10) {
         return 'Enter a $rewardName threshold from 1 through 10.';
@@ -438,8 +420,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
     }
 
     if (quantityController != null) {
-      final quantity =
-          int.tryParse(quantityController.text.trim());
+      final quantity = int.tryParse(quantityController.text.trim());
 
       if (quantity == null || quantity <= 0) {
         return 'Enter a token quantity greater than zero.';
@@ -491,21 +472,21 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                         return DropdownMenuItem<String>(
                             value: resReq, child: Text(resReq));
                       }).toList(),
-                                              onChanged: (value) {
-                          if (value == null) {
-                            return;
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+
+                        setState(() {
+                          _responseRequired = value;
+
+                          if (_responseRequired != 'Yes') {
+                            _responseType = null;
                           }
 
-                          setState(() {
-                            _responseRequired = value;
-
-                            if (_responseRequired != 'Yes') {
-                              _responseType = null;
-                            }
-
-                            _errorMessage = null;
-                          });
-                        },
+                          _errorMessage = null;
+                        });
+                      },
                       decoration: InputDecoration(
                         border: OutlineInputBorder(
                             borderSide: BorderSide(color: Colors.grey[400]!)),
@@ -578,7 +559,6 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                 ),
               ),
               SizedBox(height: 20.h),
-
               _buildPromptRewardSection(
                 rewardName: 'streak',
                 enabled: _streakEnabled,
@@ -598,8 +578,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     _streakOperator = value;
                   });
                 },
-                numericThresholdController:
-                    _streakThresholdController,
+                numericThresholdController: _streakThresholdController,
                 yesNoThreshold: _streakYesNoThreshold,
                 onYesNoChanged: (value) {
                   if (value == null) {
@@ -611,7 +590,6 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                   });
                 },
               ),
-
               _buildPromptRewardSection(
                 rewardName: 'token reward',
                 enabled: _tokenEnabled,
@@ -631,8 +609,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     _tokenOperator = value;
                   });
                 },
-                numericThresholdController:
-                    _tokenThresholdController,
+                numericThresholdController: _tokenThresholdController,
                 yesNoThreshold: _tokenYesNoThreshold,
                 onYesNoChanged: (value) {
                   if (value == null) {

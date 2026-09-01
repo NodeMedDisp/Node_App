@@ -80,7 +80,7 @@ class AuthCubit extends Cubit<AuthState> {
 
       // Retrieve the ID token (accessToken is deprecated in newer versions)
       final GoogleSignInAuthentication googleAuth =
-      await googleUser.authentication;
+          await googleUser.authentication;
 
       if (googleAuth.idToken == null) {
         emit(AuthError('Failed to retrieve ID token from Google.'));
@@ -94,7 +94,7 @@ class AuthCubit extends Cubit<AuthState> {
 
       // Sign in to Firebase with the credential
       final UserCredential authResult =
-      await FirebaseAuth.instance.signInWithCredential(credential);
+          await FirebaseAuth.instance.signInWithCredential(credential);
 
       // Check if the user is new
       if (authResult.additionalUserInfo?.isNewUser ?? false) {

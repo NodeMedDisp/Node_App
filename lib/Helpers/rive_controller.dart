@@ -10,7 +10,7 @@ class RiveAnimationControllerHelper {
   // consistency and avoid unnecessary resource consumption.
 
   static final RiveAnimationControllerHelper _instance =
-  RiveAnimationControllerHelper._internal();
+      RiveAnimationControllerHelper._internal();
 
   factory RiveAnimationControllerHelper() {
     return _instance;

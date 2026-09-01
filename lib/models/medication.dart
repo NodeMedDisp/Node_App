@@ -74,8 +74,7 @@ class Medication {
       'frequency': frequency,
       'times': times,
       'numDays': numDays,
-      if (startDate != null)
-        'startDate': startDate!.toIso8601String(),
+      if (startDate != null) 'startDate': startDate!.toIso8601String(),
       'streakEnabled': streakEnabled,
       'streakTitle': streakTitle,
       'streakThreshold': streakThreshold,
