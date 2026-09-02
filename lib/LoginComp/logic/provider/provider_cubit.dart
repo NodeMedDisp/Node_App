@@ -18,6 +18,8 @@ class ProviderCubit extends Cubit<ProviderState> {
 
   StreamSubscription<List<CounselingQuestion>>? _promptsSubscription;
 
+  StreamSubscription<Map<DateTime, List<Map<String, dynamic>>>>? _recoverySubscription;
+
   String? _clinicId;
   String? _watchedPatientId;
 
@@ -67,6 +69,7 @@ class ProviderCubit extends Cubit<ProviderState> {
         clearSelectedUser: true,
         selectedMedications: const [],
         selectedPrompts: const [],
+        recoveryMap: const {},
       ),
     );
 
@@ -166,6 +169,7 @@ class ProviderCubit extends Cubit<ProviderState> {
         selectedMedications: const [],
         selectedPrompts: const [],
         clearError: true,
+        recoveryMap: const {},
       ),
     );
 
@@ -179,6 +183,7 @@ class ProviderCubit extends Cubit<ProviderState> {
 
     await _medicationsSubscription?.cancel();
     await _promptsSubscription?.cancel();
+    await _recoverySubscription?.cancel();
 
     _watchedPatientId = user.id;
 
@@ -251,6 +256,41 @@ class ProviderCubit extends Cubit<ProviderState> {
       ) {
         _handleStreamError(
           'prompts',
+          error,
+          stackTrace,
+        );
+      },
+    );
+
+    _recoverySubscription = repository
+        .watchRecoveryProgress(
+      clinicId: clinicId,
+      patientId: user.id,
+    )
+        .listen(
+      (recoveryMap) {
+        if (isClosed || state.selectedUser?.id != user.id) {
+          return;
+        }
+
+        debugPrint(
+          'PROVIDER CUBIT: Updating UI with '
+          '${recoveryMap.length} recovery days '
+          'patient=${user.id}',
+        );
+
+        emit(
+          state.copyWith(
+            recoveryMap: recoveryMap,
+          ),
+        );
+      },
+      onError: (
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        _handleStreamError(
+          'recovery progress',
           error,
           stackTrace,
         );
@@ -502,12 +542,47 @@ class ProviderCubit extends Cubit<ProviderState> {
     }
   }
 
+  Future<void> saveRecoveryProgress({
+    required DateTime date,
+    required List<Map<String, dynamic>> entries,
+  }) async {
+    final patient = state.selectedUser;
+
+    if (patient == null) {
+      debugPrint(
+        'PROVIDER CUBIT: Cannot save recovery; '
+        'no patient selected',
+      );
+      return;
+    }
+
+    if (entries.isEmpty) {
+      return;
+    }
+
+    debugPrint(
+      'PROVIDER CUBIT: Saving recovery '
+      'patient=${patient.id} '
+      'date=$date '
+      'entries=${entries.length}',
+    );
+
+    await repository.saveRecoveryProgress(
+      clinicId: clinicId,
+      patientId: patient.id,
+      date: date,
+      entries: entries,
+    );
+  }
+  
   Future<void> _stopProgramListeners() async {
     await _medicationsSubscription?.cancel();
     await _promptsSubscription?.cancel();
+    await _recoverySubscription?.cancel();
 
     _medicationsSubscription = null;
     _promptsSubscription = null;
+    _recoverySubscription = null;
     _watchedPatientId = null;
   }
 

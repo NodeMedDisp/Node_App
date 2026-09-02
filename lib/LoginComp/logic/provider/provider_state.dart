@@ -12,7 +12,7 @@ class ProviderState extends Equatable {
   final List<ProviderUser> users;
   final ProviderUser? selectedUser;
 
-  final Map<DateTime, List<Map<String, dynamic>>>? recoveryMap;
+  final Map<DateTime, List<Map<String, dynamic>>> recoveryMap;
 
   final List<Medication> selectedMedications;
   final List<CounselingQuestion> selectedPrompts;
@@ -23,7 +23,7 @@ class ProviderState extends Equatable {
     this.errorMessage,
     this.users = const [],
     this.selectedUser,
-    this.recoveryMap,
+    this.recoveryMap = const {},
     this.selectedMedications = const [],
     this.selectedPrompts = const [],
   });

@@ -25,6 +25,18 @@ abstract class ProviderRepository {
     required String patientId,
   });
 
+  Stream<Map<DateTime, List<Map<String, dynamic>>>> watchRecoveryProgress({
+    required String clinicId,
+    required String patientId,
+  });
+
+  Future<void> saveRecoveryProgress({
+    required String clinicId,
+    required String patientId,
+    required DateTime date,
+    required List<Map<String, dynamic>> entries,
+  });
+
   Future<void> seedDemoPatientsIfMissing(String clinicId);
 
   Future<ProviderUser> createPatient({

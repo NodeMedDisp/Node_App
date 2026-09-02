@@ -44,6 +44,29 @@ class FirestoreProviderRepository implements ProviderRepository {
     return _patient(clinicId, patientId).collection('prompts');
   }
 
+  CollectionReference<Map<String, dynamic>> _recoveryDays(
+    String clinicId,
+    String patientId,
+  ) {
+    return _patient(
+      clinicId,
+      patientId,
+    ).collection('recoveryDays');
+  }
+
+  String _recoveryDateKey(DateTime date) {
+    final normalized = DateTime(
+      date.year,
+      date.month,
+      date.day,
+    );
+
+    final month = normalized.month.toString().padLeft(2, '0');
+    final day = normalized.day.toString().padLeft(2, '0');
+
+    return '${normalized.year}-$month-$day';
+  }
+
   String _normalizeDeviceId(String value) {
     return value.trim().toLowerCase();
   }
@@ -175,6 +198,109 @@ class FirestoreProviderRepository implements ProviderRepository {
     });
   }
 
+  @override
+  Stream<Map<DateTime, List<Map<String, dynamic>>>>
+      watchRecoveryProgress({
+    required String clinicId,
+    required String patientId,
+  }) {
+    debugPrint(
+      'FIRESTORE: Watching recovery progress '
+      'patient=$patientId',
+    );
+
+    return _recoveryDays(
+      clinicId,
+      patientId,
+    ).snapshots().map((snapshot) {
+      final recoveryMap =
+          <DateTime, List<Map<String, dynamic>>>{};
+
+      for (final document in snapshot.docs) {
+        try {
+          final date = DateTime.parse(document.id);
+
+          final normalizedDate = DateTime(
+            date.year,
+            date.month,
+            date.day,
+          );
+
+          final data = document.data();
+
+          final rawEntries =
+              data['entries'] as List<dynamic>? ?? const [];
+
+          recoveryMap[normalizedDate] =
+              rawEntries.map((entry) {
+            return Map<String, dynamic>.from(
+              entry as Map,
+            );
+          }).toList();
+        } catch (error) {
+          debugPrint(
+            'FIRESTORE: Could not parse recovery day '
+            'id=${document.id} error=$error',
+          );
+        }
+      }
+
+      debugPrint(
+        'FIRESTORE: Recovery snapshot '
+        'patient=$patientId days=${recoveryMap.length}',
+      );
+
+      return recoveryMap;
+    });
+  }
+
+  @override
+  Future<void> saveRecoveryProgress({
+    required String clinicId,
+    required String patientId,
+    required DateTime date,
+    required List<Map<String, dynamic>> entries,
+  }) async {
+    if (entries.isEmpty) {
+      return;
+    }
+
+    final dateKey = _recoveryDateKey(date);
+
+    final reference = _recoveryDays(
+      clinicId,
+      patientId,
+    ).doc(dateKey);
+
+    debugPrint(
+      'FIRESTORE: Saving recovery progress '
+      'patient=$patientId '
+      'date=$dateKey '
+      'entries=${entries.length}',
+    );
+
+    await reference.set(
+      {
+        'date': dateKey,
+
+        // arrayUnion is important:
+        // receiving the same NODE record twice
+        // will not duplicate identical entries.
+        'entries': FieldValue.arrayUnion(
+          entries,
+        ),
+
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    debugPrint(
+      'FIRESTORE: Recovery progress saved '
+      'patient=$patientId date=$dateKey',
+    );
+  }
+  
   @override
   Future<void> seedDemoPatientsIfMissing(
     String clinicId,
