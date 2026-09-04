@@ -16,10 +16,7 @@ class FirestoreProviderRepository implements ProviderRepository {
   CollectionReference<Map<String, dynamic>> _patients(
     String clinicId,
   ) {
-    return firestore
-        .collection('clinics')
-        .doc(clinicId)
-        .collection('patients');
+    return firestore.collection('clinics').doc(clinicId).collection('patients');
   }
 
   DocumentReference<Map<String, dynamic>> _patient(
@@ -33,8 +30,7 @@ class FirestoreProviderRepository implements ProviderRepository {
     String clinicId,
     String patientId,
   ) {
-    return _patient(clinicId, patientId)
-        .collection('medications');
+    return _patient(clinicId, patientId).collection('medications');
   }
 
   CollectionReference<Map<String, dynamic>> _prompts(
@@ -77,10 +73,8 @@ class FirestoreProviderRepository implements ProviderRepository {
   }) {
     return {
       ...patient.toFirestore(),
-      'deviceIdNormalized':
-          _normalizeDeviceId(patient.deviceId),
-      if (creating)
-        'createdAt': FieldValue.serverTimestamp(),
+      'deviceIdNormalized': _normalizeDeviceId(patient.deviceId),
+      if (creating) 'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -91,8 +85,7 @@ class FirestoreProviderRepository implements ProviderRepository {
   }) {
     return {
       ...data,
-      if (creating)
-        'createdAt': FieldValue.serverTimestamp(),
+      if (creating) 'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -114,9 +107,8 @@ class FirestoreProviderRepository implements ProviderRepository {
           .toList();
 
       patients.sort(
-        (a, b) => a.displayName
-            .toLowerCase()
-            .compareTo(b.displayName.toLowerCase()),
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
       );
 
       debugPrint(
@@ -136,9 +128,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       'FIRESTORE: Watching medications patient=$patientId',
     );
 
-    return _medications(clinicId, patientId)
-        .snapshots()
-        .map((snapshot) {
+    return _medications(clinicId, patientId).snapshots().map((snapshot) {
       final medications = snapshot.docs
           .map(
             (document) => Medication.fromJson(
@@ -149,8 +139,7 @@ class FirestoreProviderRepository implements ProviderRepository {
           .toList();
 
       medications.sort(
-        (a, b) =>
-            a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
       );
 
       debugPrint(
@@ -171,9 +160,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       'FIRESTORE: Watching prompts patient=$patientId',
     );
 
-    return _prompts(clinicId, patientId)
-        .snapshots()
-        .map((snapshot) {
+    return _prompts(clinicId, patientId).snapshots().map((snapshot) {
       final prompts = snapshot.docs
           .map(
             (document) => CounselingQuestion.fromJson(
@@ -184,9 +171,7 @@ class FirestoreProviderRepository implements ProviderRepository {
           .toList();
 
       prompts.sort(
-        (a, b) => a.prompt
-            .toLowerCase()
-            .compareTo(b.prompt.toLowerCase()),
+        (a, b) => a.prompt.toLowerCase().compareTo(b.prompt.toLowerCase()),
       );
 
       debugPrint(
@@ -199,8 +184,7 @@ class FirestoreProviderRepository implements ProviderRepository {
   }
 
   @override
-  Stream<Map<DateTime, List<Map<String, dynamic>>>>
-      watchRecoveryProgress({
+  Stream<Map<DateTime, List<Map<String, dynamic>>>> watchRecoveryProgress({
     required String clinicId,
     required String patientId,
   }) {
@@ -213,8 +197,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       clinicId,
       patientId,
     ).snapshots().map((snapshot) {
-      final recoveryMap =
-          <DateTime, List<Map<String, dynamic>>>{};
+      final recoveryMap = <DateTime, List<Map<String, dynamic>>>{};
 
       for (final document in snapshot.docs) {
         try {
@@ -228,11 +211,9 @@ class FirestoreProviderRepository implements ProviderRepository {
 
           final data = document.data();
 
-          final rawEntries =
-              data['entries'] as List<dynamic>? ?? const [];
+          final rawEntries = data['entries'] as List<dynamic>? ?? const [];
 
-          recoveryMap[normalizedDate] =
-              rawEntries.map((entry) {
+          recoveryMap[normalizedDate] = rawEntries.map((entry) {
             return Map<String, dynamic>.from(
               entry as Map,
             );
@@ -300,7 +281,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       'patient=$patientId date=$dateKey',
     );
   }
-  
+
   @override
   Future<void> seedDemoPatientsIfMissing(
     String clinicId,
@@ -317,8 +298,7 @@ class FirestoreProviderRepository implements ProviderRepository {
         displayName: 'Demo User 1',
         deviceId: 'DEV-001',
         source: 'demo',
-        startDate:
-            DateTime.now().subtract(const Duration(days: 10)),
+        startDate: DateTime.now().subtract(const Duration(days: 10)),
         latestEntryDate: DateTime.now(),
       ),
       medications: const [
@@ -360,8 +340,7 @@ class FirestoreProviderRepository implements ProviderRepository {
         displayName: 'Demo User 2',
         deviceId: 'DEV-002',
         source: 'demo',
-        startDate:
-            DateTime.now().subtract(const Duration(days: 5)),
+        startDate: DateTime.now().subtract(const Duration(days: 5)),
         latestEntryDate: DateTime.now(),
       ),
       medications: const [
@@ -403,8 +382,7 @@ class FirestoreProviderRepository implements ProviderRepository {
     required List<Medication> medications,
     required List<CounselingQuestion> prompts,
   }) async {
-    final patientReference =
-        _patient(clinicId, patient.id);
+    final patientReference = _patient(clinicId, patient.id);
 
     final existingPatient = await patientReference.get();
 
@@ -423,12 +401,9 @@ class FirestoreProviderRepository implements ProviderRepository {
       _patientData(patient, creating: true),
     );
 
-    for (var index = 0;
-        index < medications.length;
-        index++) {
-      final reference = patientReference
-          .collection('medications')
-          .doc('med-${index + 1}');
+    for (var index = 0; index < medications.length; index++) {
+      final reference =
+          patientReference.collection('medications').doc('med-${index + 1}');
 
       batch.set(
         reference,
@@ -440,9 +415,8 @@ class FirestoreProviderRepository implements ProviderRepository {
     }
 
     for (var index = 0; index < prompts.length; index++) {
-      final reference = patientReference
-          .collection('prompts')
-          .doc('prompt-${index + 1}');
+      final reference =
+          patientReference.collection('prompts').doc('prompt-${index + 1}');
 
       batch.set(
         reference,
@@ -556,8 +530,7 @@ class FirestoreProviderRepository implements ProviderRepository {
     required String patientId,
     required Medication medication,
   }) async {
-    final reference =
-        _medications(clinicId, patientId).doc();
+    final reference = _medications(clinicId, patientId).doc();
 
     debugPrint(
       'FIRESTORE: Adding medication '
@@ -566,9 +539,9 @@ class FirestoreProviderRepository implements ProviderRepository {
     );
 
     final medicationToSave = medication.startDate == null
-    ? medication.copyWith(startDate: DateTime.now())
-    : medication;
-    
+        ? medication.copyWith(startDate: DateTime.now())
+        : medication;
+
     await reference.set(
       _programData(
         medicationToSave.toJson(),
@@ -598,9 +571,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       'patient=$patientId id=$medicationId',
     );
 
-    await _medications(clinicId, patientId)
-        .doc(medicationId)
-        .set(
+    await _medications(clinicId, patientId).doc(medicationId).set(
           _programData(
             medication.toJson(),
             creating: false,
@@ -620,9 +591,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       'patient=$patientId id=$medicationId',
     );
 
-    await _medications(clinicId, patientId)
-        .doc(medicationId)
-        .delete();
+    await _medications(clinicId, patientId).doc(medicationId).delete();
   }
 
   @override
@@ -631,8 +600,7 @@ class FirestoreProviderRepository implements ProviderRepository {
     required String patientId,
     required CounselingQuestion prompt,
   }) async {
-    final reference =
-        _prompts(clinicId, patientId).doc();
+    final reference = _prompts(clinicId, patientId).doc();
 
     debugPrint(
       'FIRESTORE: Adding prompt '
@@ -640,9 +608,9 @@ class FirestoreProviderRepository implements ProviderRepository {
     );
 
     final promptToSave = prompt.startDate == null
-    ? prompt.copyWith(startDate: DateTime.now())
-    : prompt;
-    
+        ? prompt.copyWith(startDate: DateTime.now())
+        : prompt;
+
     await reference.set(
       _programData(
         promptToSave.toJson(),
@@ -672,9 +640,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       'patient=$patientId id=$promptId',
     );
 
-    await _prompts(clinicId, patientId)
-        .doc(promptId)
-        .set(
+    await _prompts(clinicId, patientId).doc(promptId).set(
           _programData(
             prompt.toJson(),
             creating: false,
@@ -694,9 +660,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       'patient=$patientId id=$promptId',
     );
 
-    await _prompts(clinicId, patientId)
-        .doc(promptId)
-        .delete();
+    await _prompts(clinicId, patientId).doc(promptId).delete();
   }
 
   @override
@@ -743,8 +707,7 @@ class FirestoreProviderRepository implements ProviderRepository {
     );
 
     for (final medication in medications) {
-      final reference =
-          patientReference.collection('medications').doc();
+      final reference = patientReference.collection('medications').doc();
 
       batch.set(
         reference,
@@ -756,8 +719,7 @@ class FirestoreProviderRepository implements ProviderRepository {
     }
 
     for (final prompt in prompts) {
-      final reference =
-          patientReference.collection('prompts').doc();
+      final reference = patientReference.collection('prompts').doc();
 
       batch.set(
         reference,

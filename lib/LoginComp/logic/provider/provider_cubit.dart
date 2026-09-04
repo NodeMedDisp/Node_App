@@ -18,7 +18,8 @@ class ProviderCubit extends Cubit<ProviderState> {
 
   StreamSubscription<List<CounselingQuestion>>? _promptsSubscription;
 
-  StreamSubscription<Map<DateTime, List<Map<String, dynamic>>>>? _recoverySubscription;
+  StreamSubscription<Map<DateTime, List<Map<String, dynamic>>>>?
+      _recoverySubscription;
 
   String? _clinicId;
   String? _watchedPatientId;
@@ -568,13 +569,13 @@ class ProviderCubit extends Cubit<ProviderState> {
     );
 
     await repository.saveRecoveryProgress(
-      clinicId: clinicId,
+      clinicId: _requireClinicId(),
       patientId: patient.id,
       date: date,
       entries: entries,
     );
   }
-  
+
   Future<void> _stopProgramListeners() async {
     await _medicationsSubscription?.cancel();
     await _promptsSubscription?.cancel();

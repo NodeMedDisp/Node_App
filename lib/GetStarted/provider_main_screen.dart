@@ -488,6 +488,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                           medications: state.selectedMedications,
                           StartDate: selectedUser.startDate ?? DateTime.now(),
                           externalFocusDay: selectedUser.latestEntryDate,
+                          externalRecoveryProgress: state.recoveryMap,
                         ),
                 ),
               ],

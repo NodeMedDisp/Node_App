@@ -233,7 +233,12 @@ class CalendarWidgetState extends State<CalendarWidget> {
   void didUpdateWidget(covariant CalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final patientChanged = oldWidget.dataOwnerId != widget.dataOwnerId;
+    final patientChanged =
+        oldWidget.dataOwnerId != widget.dataOwnerId;
+
+    final recoveryChanged =
+        oldWidget.externalRecoveryProgress !=
+            widget.externalRecoveryProgress;
 
     if (patientChanged) {
       debugPrint(
@@ -241,18 +246,41 @@ class CalendarWidgetState extends State<CalendarWidget> {
         '${oldWidget.dataOwnerId} -> ${widget.dataOwnerId}',
       );
 
-      _focusedDay = widget.externalFocusDay ?? widget.StartDate;
+      _focusedDay =
+          widget.externalFocusDay ?? widget.StartDate;
+
       _selectedDay = _focusedDay;
 
-      // Provider patients should not inherit another patient's
-      // locally-held recovery progress.
+      // Clear the previous patient's recovery data.
       recoveryProgress.clear();
 
+      // Load the newly selected patient's cloud recovery data.
       if (widget.externalRecoveryProgress != null) {
         recoveryProgress.addAll(
           widget.externalRecoveryProgress!,
         );
       }
+
+      debugPrint(
+        'CALENDAR: Loaded recovery after patient change '
+        'owner=${widget.dataOwnerId} '
+        'days=${recoveryProgress.length}',
+      );
+
+      return;
+    }
+
+    // Same patient, but Firestore sent updated recovery data.
+    if (recoveryChanged) {
+      recoveryProgress = {
+        ...?widget.externalRecoveryProgress,
+      };
+
+      debugPrint(
+        'CALENDAR: Cloud recovery updated '
+        'owner=${widget.dataOwnerId} '
+        'days=${recoveryProgress.length}',
+      );
     }
   }
 
@@ -404,12 +432,43 @@ class CalendarWidgetState extends State<CalendarWidget> {
         };
       }
       if (parsedEntry != null) {
-        if (!existing.any((e) => mapEquals(e, parsedEntry))) {
+        if (!existing.any(
+          (entry) => mapEquals(entry, parsedEntry),
+        )) {
           recoveryProgress
-              .putIfAbsent(normalizedDate, () => [])
+              .putIfAbsent(
+                normalizedDate,
+                () => [],
+              )
               .add(parsedEntry);
+
+          // Keep the local Hive cache.
           _saveRecoveryProgress(
-              normalizedDate, recoveryProgress[normalizedDate]!);
+            normalizedDate,
+            recoveryProgress[normalizedDate]!,
+          );
+
+          // Provider mode: also save to Firestore.
+          try {
+            final providerCubit =
+                context.read<ProviderCubit>();
+
+            if (providerCubit.state.selectedUser != null) {
+              providerCubit.saveRecoveryProgress(
+                date: normalizedDate,
+                entries: [
+                  Map<String, dynamic>.from(
+                    parsedEntry,
+                  ),
+                ],
+              );
+            }
+          } catch (error) {
+            debugPrint(
+              'CALENDAR: Cloud recovery save skipped/error: '
+              '$error',
+            );
+          }
         }
       }
     }

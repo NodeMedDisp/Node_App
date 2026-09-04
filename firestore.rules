@@ -42,6 +42,11 @@ service cloud.firestore {
           allow read, create, update, delete:
               if isActiveClinicMember(clinicId);
         }
+
+        match /recoveryDays/{recoveryDayId} {
+          allow read, create, update, delete:
+              if isActiveClinicMember(clinicId);
+        }
       }
     }
 
