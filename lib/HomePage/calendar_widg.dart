@@ -14,6 +14,7 @@ import '/../../LoginComp/theming/colors.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:path_provider/path_provider.dart';
 import '../models/medication.dart';
 import '../models/counseling_question.dart';
@@ -48,6 +49,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
   late DateTime _selectedDay;
   bool isBluetoothConnected = false;
   BluetoothCharacteristic? fileCharacteristic;
+  StreamSubscription<List<int>>? _bleValueSubscription;
   String fileContent = "";
 
   Map<DateTime, List<Map<String, dynamic>>> recoveryProgress = {};
@@ -202,6 +204,12 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   @override
+  void dispose() {
+    _bleValueSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
 
@@ -233,12 +241,10 @@ class CalendarWidgetState extends State<CalendarWidget> {
   void didUpdateWidget(covariant CalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final patientChanged =
-        oldWidget.dataOwnerId != widget.dataOwnerId;
+    final patientChanged = oldWidget.dataOwnerId != widget.dataOwnerId;
 
     final recoveryChanged =
-        oldWidget.externalRecoveryProgress !=
-            widget.externalRecoveryProgress;
+        oldWidget.externalRecoveryProgress != widget.externalRecoveryProgress;
 
     if (patientChanged) {
       debugPrint(
@@ -246,8 +252,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
         '${oldWidget.dataOwnerId} -> ${widget.dataOwnerId}',
       );
 
-      _focusedDay =
-          widget.externalFocusDay ?? widget.StartDate;
+      _focusedDay = widget.externalFocusDay ?? widget.StartDate;
 
       _selectedDay = _focusedDay;
 
@@ -378,12 +383,12 @@ class CalendarWidgetState extends State<CalendarWidget> {
       for (var characteristic in service.characteristics) {
         if (characteristic.properties.notify) {
           await characteristic.setNotifyValue(true);
-          characteristic.lastValueStream.listen((data) {
-            _handleFileData(data);
-          });
-          setState(() {
-            fileCharacteristic = characteristic;
-          });
+          await _bleValueSubscription?.cancel();
+          _bleValueSubscription = characteristic.lastValueStream.listen(
+            (data) {
+              _handleFileData(data);
+            },
+          );
         }
       }
     }
@@ -405,11 +410,23 @@ class CalendarWidgetState extends State<CalendarWidget> {
       final line = rawLine.trim();
       if (line.startsWith("Date:")) {
         final dateString = line.substring(5).trim();
-        try {
-          currentDate = DateTime.parse(dateString);
-        } catch (_) {
+        final parsedDate = DateTime.tryParse(dateString);
+        if (parsedDate == null) {
+          debugPrint(
+            'CALENDAR: Ignoring invalid NODE date: $dateString',
+          );
           currentDate = null;
+          continue;
         }
+        if (parsedDate.year < 2000) {
+          debugPrint(
+            'CALENDAR: Ignoring uninitialized NODE date: '
+            '$dateString',
+          );
+          currentDate = null;
+          continue;
+        }
+        currentDate = parsedDate;
         continue;
       }
       if (currentDate == null || line.isEmpty) continue;
@@ -450,8 +467,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
 
           // Provider mode: also save to Firestore.
           try {
-            final providerCubit =
-                context.read<ProviderCubit>();
+            final providerCubit = context.read<ProviderCubit>();
 
             if (providerCubit.state.selectedUser != null) {
               providerCubit.saveRecoveryProgress(

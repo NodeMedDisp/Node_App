@@ -8,6 +8,7 @@ import '../LoginComp/logic/provider/provider_cubit.dart';
 import '../LoginComp/logic/provider/provider_state.dart';
 import '../LoginComp/routing/routes.dart';
 import '../Bluetooth/bluetooth_trial.dart';
+import '../models/counseling_question.dart';
 import 'provider_program_editor_screen.dart';
 import '../Bluetooth/node_ble_file_transfer_service.dart';
 import '../Bluetooth/recovery_program_file_formatter.dart';
@@ -198,6 +199,44 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
     await _sendSelectedPatientProgram(device);
   }
 
+  bool _isPromptActiveOnDate(
+    CounselingQuestion prompt,
+    DateTime day,
+    DateTime fallbackStartDate,
+  ) {
+    if (prompt.numberOfDays <= 0) {
+      return false;
+    }
+
+    final promptStart =
+        prompt.startDate ?? fallbackStartDate;
+
+    final promptEnd = promptStart.add(
+      Duration(days: prompt.numberOfDays - 1),
+    );
+
+    final normalizedDay = DateTime(
+      day.year,
+      day.month,
+      day.day,
+    );
+
+    final normalizedStart = DateTime(
+      promptStart.year,
+      promptStart.month,
+      promptStart.day,
+    );
+
+    final normalizedEnd = DateTime(
+      promptEnd.year,
+      promptEnd.month,
+      promptEnd.day,
+    );
+
+    return !normalizedDay.isBefore(normalizedStart) &&
+        !normalizedDay.isAfter(normalizedEnd);
+  }
+  
   Future<void> _sendSelectedPatientProgram(
     BluetoothDevice device,
   ) async {
@@ -215,28 +254,66 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
       return;
     }
 
-    if (state.selectedMedications.isEmpty && state.selectedPrompts.isEmpty) {
+    final today = DateTime.now();
+
+    final patientStartDate =
+        selectedPatient.startDate ?? today;
+
+    final activePrompts = state.selectedPrompts.where(
+      (prompt) {
+        return _isPromptActiveOnDate(
+          prompt,
+          today,
+          patientStartDate,
+        );
+      },
+    ).toList();
+
+    debugPrint(
+      'PROVIDER BLE: Prompt filtering '
+      'total=${state.selectedPrompts.length} '
+      'activeToday=${activePrompts.length}',
+    );
+
+    for (final prompt in activePrompts) {
+      debugPrint(
+        'PROVIDER BLE: Active prompt '
+        '"${prompt.prompt}" '
+        'start=${prompt.startDate} '
+        'days=${prompt.numberOfDays}',
+      );
+    }
+
+    if (state.selectedMedications.isEmpty &&
+        activePrompts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'The selected patient has no recovery program to send.',
+            'The selected patient has no active recovery program today.',
           ),
         ),
       );
       return;
     }
 
-    final fileContent = RecoveryProgramFileFormatter.build(
+    final fileContent =
+        RecoveryProgramFileFormatter.build(
       medications: state.selectedMedications,
-      prompts: state.selectedPrompts,
+      prompts: activePrompts,
     );
 
     debugPrint(
       'PROVIDER BLE: Sending program '
       'patient=${selectedPatient.id} '
       'medications=${state.selectedMedications.length} '
-      'prompts=${state.selectedPrompts.length} '
+      'prompts=${activePrompts.length} '
       'device=${device.remoteId}',
+    );
+
+    debugPrint(
+      '========== PROGRAM SENT TO NODE ==========\n'
+      '$fileContent'
+      '==========================================',
     );
 
     try {
