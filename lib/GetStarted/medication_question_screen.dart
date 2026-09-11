@@ -1,6 +1,6 @@
-
 import 'package:gap/gap.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '/GetStarted/enter_medication_data.dart';
 
 import 'package:flutter/material.dart';
@@ -9,16 +9,21 @@ import '/../../LoginComp/theming/colors.dart';
 
 class PrescriptionQuestionScreen extends StatefulWidget {
   final String selectedSurgery;
+  final BluetoothDevice? device;
 
-  const PrescriptionQuestionScreen({super.key, required this.selectedSurgery});
-
-  get device => null;
+  const PrescriptionQuestionScreen({
+    super.key,
+    required this.selectedSurgery,
+    this.device,
+  });
 
   @override
-  _PrescriptionQuestionScreenState createState() => _PrescriptionQuestionScreenState();
+  _PrescriptionQuestionScreenState createState() =>
+      _PrescriptionQuestionScreenState();
 }
 
-class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen> {
+class _PrescriptionQuestionScreenState
+    extends State<PrescriptionQuestionScreen> {
   String? selectedOption;
 
   @override
@@ -69,7 +74,8 @@ class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => EnterPrescriptionData(device: widget.device), 
+                        builder: (context) =>
+                            EnterPrescriptionData(device: widget.device),
                       ),
                     );
                   },
@@ -77,9 +83,9 @@ class _PrescriptionQuestionScreenState extends State<PrescriptionQuestionScreen>
                     minimumSize: Size(double.infinity, 50.h),
                   ),
                   child: Text(
-                      'Continue',
-                    style:
-                    TextStyles.font14Hint500Weight.copyWith(color: ColorsManager.mainBlue),
+                    'Continue',
+                    style: TextStyles.font14Hint500Weight
+                        .copyWith(color: ColorsManager.mainBlue),
                   ),
                 ),
             ],

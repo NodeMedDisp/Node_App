@@ -1,38 +1,83 @@
 import 'dart:async';
-import 'dart:io'; // For file reading
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart'; // For locating the file
-import '/GetStarted/get_started.dart';
 
 class BLEScannerWidget extends StatefulWidget {
-  const BLEScannerWidget({Key? key}) : super(key: key);
+  const BLEScannerWidget({super.key});
 
   @override
-  _BLEScannerWidgetState createState() => _BLEScannerWidgetState();
+  State<BLEScannerWidget> createState() => _BLEScannerWidgetState();
 }
 
 class _BLEScannerWidgetState extends State<BLEScannerWidget> {
   List<ScanResult> scanResults = [];
-  BluetoothDevice? connectedDevice; // Track the connected device
   bool isScanning = false;
+
+  StreamSubscription<List<ScanResult>>? scanResultsSubscription;
+  StreamSubscription<bool>? isScanningSubscription;
 
   @override
   void initState() {
     super.initState();
-    requestPermissions();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      checkPermissionsThenStartScan();
+    });
   }
 
-  // Request necessary Bluetooth permissions
-  Future<void> requestPermissions() async {
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
+/*
+  /// NEW: Simulates a successful data transfer from a device without using Bluetooth hardware
+  void simulateFakeImport() {
+    // This is the EXACT format the hardware will eventually send
+    String fakeDeviceData = """
+      Medication: Buprenorphine
+      Dose: 8mg
+      Frequency: Daily
+      Times: 9:00 AM, 9:00 PM
+      Days: 0 to 45
+      -------------------
+      Medication: Naloxone
+      Dose: 2mg
+      Frequency: As Needed
+      Times: 12:00 PM
+      Days: 0 to 14
+      -------------------
+      """;
 
-    if (statuses.values.every((status) => status.isGranted)) {
+    debugPrint("DEBUG: Simulating import of fake device data...");
+
+    // Use our existing parser
+    final parsedMeds = _parseIncomingData(fakeDeviceData);
+
+    if (parsedMeds.isNotEmpty) {
+      context.read<ProviderCubit>().importPatientFromDevice(
+        displayName: "Simulated NODE Patient",
+        deviceId: "Simulated-NODE-01",
+        medications: parsedMeds,
+        prompts: const [],
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Simulated Import Successful!"),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      // Return to dashboard to see the new patient
+      Navigator.pop(context);
+    }
+  }
+  */
+
+  Future<void> checkPermissionsThenStartScan() async {
+    final hasPermissions = await requestBluetoothPermissions();
+
+    if (!mounted) return;
+
+    if (hasPermissions) {
       startScanning();
     } else {
       showPermissionDialog();
@@ -49,15 +94,11 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
               'Bluetooth and Location permissions are required to scan for BLE devices.'),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
-                openAppSettings();
-              },
+              onPressed: () => openAppSettings(),
               child: const Text('Open Settings'),
             ),
           ],
@@ -66,31 +107,69 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
     );
   }
 
-  // Start scanning for BLE devices
-  void startScanning() {
-    setState(() {
-      isScanning = true;
-      scanResults.clear();
-    });
+  Future<void> startScanning() async {
+    final adapterState = await FlutterBluePlus.adapterState.first;
 
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+    debugPrint("DEBUG: Bluetooth adapter state: $adapterState");
 
-    FlutterBluePlus.scanResults.listen((results) {
-      if (!mounted) return; // Ensure widget is mounted
+    if (adapterState != BluetoothAdapterState.on) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please turn Bluetooth on.")),
+      );
+      return;
+    }
+
+    await scanResultsSubscription?.cancel();
+    await isScanningSubscription?.cancel();
+
+    scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
+      debugPrint("DEBUG: Scan results count: ${results.length}");
+
+      for (final result in results) {
+        debugPrint(
+          "DEBUG: Found device: "
+          "platformName='${result.device.platformName}', "
+          "advName='${result.advertisementData.advName}', "
+          "remoteId='${result.device.remoteId}', "
+          "rssi='${result.rssi}', "
+          "serviceUuids='${result.advertisementData.serviceUuids}'",
+        );
+      }
+
+      if (!mounted) return;
+
       setState(() {
         scanResults = results;
       });
     });
 
-    FlutterBluePlus.isScanning.listen((scanning) {
-      if (!mounted) return; // Ensure widget is mounted
+    isScanningSubscription = FlutterBluePlus.isScanning.listen((scanning) {
+      if (!mounted) return;
+
       setState(() {
         isScanning = scanning;
       });
     });
+
+    if (!mounted) return;
+
+    setState(() {
+      isScanning = true;
+      scanResults.clear();
+    });
+
+    debugPrint("DEBUG: Starting BLE scan...");
+    debugPrint("SCAN: ${await Permission.bluetoothScan.status}");
+    debugPrint("CONNECT: ${await Permission.bluetoothConnect.status}");
+    debugPrint("ADVERTISE: ${await Permission.bluetoothAdvertise.status}");
+
+    await FlutterBluePlus.startScan(
+      timeout: const Duration(seconds: 30),
+    );
   }
 
-  // Stop scanning
   void stopScanning() {
     FlutterBluePlus.stopScan();
     if (mounted) {
@@ -100,202 +179,332 @@ class _BLEScannerWidgetState extends State<BLEScannerWidget> {
     }
   }
 
-  // Function to connect to a BLE device
+  @override
+  void dispose() {
+    scanResultsSubscription?.cancel();
+    isScanningSubscription?.cancel();
+    FlutterBluePlus.stopScan();
+    super.dispose();
+  }
+
   Future<void> connectToDevice(BluetoothDevice device) async {
+    final hasPermissions = await requestBluetoothPermissions();
+
+    if (!mounted) return;
+
+    if (!hasPermissions) {
+      showPermissionDialog();
+      return;
+    }
+
     try {
-      print('Connecting to ${device.platformName}');
+      debugPrint(
+        'BLE SCANNER: Connecting to '
+        '${device.platformName} (${device.remoteId})',
+      );
+
+      await FlutterBluePlus.stopScan();
       await device.connect();
-      if (mounted) {
-        setState(() {
-          connectedDevice = device; // Mark the device as connected
-        });
-      }
-      print('Connected to ${device.platformName}');
+
+      if (!mounted) return;
+
+      debugPrint(
+        'BLE SCANNER: Connected. Returning device '
+        '${device.remoteId}',
+      );
+
+      Navigator.pop(context, device);
     } catch (e) {
-      print('Error connecting to device: $e');
+      debugPrint('BLE SCANNER: Connection failed: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not connect to device: $e'),
+        ),
+      );
     }
   }
 
-  // Locate the file in local storage
-  Future<String?> locateFile() async {
-    try {
-      final directory =
-      await getApplicationDocumentsDirectory(); // Use path_provider to get the file directory
-      final filePath = '${directory.path}/user_responses.txt';
-      return filePath;
-    } catch (e) {
-      print('Error locating file: $e');
-      return null;
+/*
+  /// Formats the Patient Medication objects into a text string
+  String _formatMedicationData(List<dynamic> medications) {
+    if (medications.isEmpty) return "No Medication Data Found";
+
+    StringBuffer buffer = StringBuffer();
+    for (var med in medications) {
+      buffer.writeln("Medication: ${med.name}");
+      buffer.writeln("Dose: ${med.dose}");
+      buffer.writeln("Frequency: ${med.frequency}");
+      buffer.writeln("Times: ${med.times}");
+      buffer.writeln("Days: 0 to ${med.numDays}");
+      buffer.writeln("-------------------");
     }
+    return buffer.toString();
   }
 
-  // Read the file's contents
-  Future<String> readFile(String path) async {
+  /// Sends the specific patient configuration to the device
+  Future<void> sendPatientConfigToDevice(BluetoothDevice device, List<dynamic> patientMeds) async {
     try {
-      final file = File(path);
-      return await file.readAsString(); // Read file content as a string
-    } catch (e) {
-      print('Error reading file: $e');
-      return '';
-    }
-  }
+      String fileContent = _formatMedicationData(patientMeds);
 
-  // Function to send the file content to the connected BLE device
-  Future<void> sendFileToDevice(BluetoothDevice device) async {
-    try {
-      // Locate and read the file
-      final filePath = await locateFile();
-      if (filePath == null) {
-        print("File not found.");
-        return;
-      }
+      debugPrint("DEBUG: Sending Patient Config:\n$fileContent");
 
-      String fileContent = await readFile(filePath);
-      if (fileContent.isEmpty) {
-        print("File is empty.");
-        return;
-      }
-
-      // Discover services and characteristics
       List<BluetoothService> services = await device.discoverServices();
-
       for (var service in services) {
         for (var characteristic in service.characteristics) {
           if (characteristic.properties.write) {
             List<int> bytes = fileContent.codeUnits;
-            int chunkSize = 20; // BLE payload size is typically 20 bytes
+            int chunkSize = 20;
 
-            // Send the file content in chunks
             for (int i = 0; i < bytes.length; i += chunkSize) {
               List<int> chunk = bytes.sublist(
                   i, (i + chunkSize > bytes.length) ? bytes.length : i + chunkSize);
               await characteristic.write(chunk, withoutResponse: false);
             }
-            print('File sent successfully!');
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Device Configured Successfully!"), backgroundColor: Colors.green),
+            );
+
+            Navigator.pop(context);
+            return;
           }
         }
       }
     } catch (e) {
-      print('Error sending file: $e');
+      debugPrint('Error sending configuration: $e');
     }
+  }
+
+  /// Parses a text string from the device back into Medication objects
+  List<Medication> _parseIncomingData(String data) {
+    final List<Medication> newMeds = [];
+    final List<String> entries = data.split("-------------------");
+
+    String valueAfterColon(String line) {
+      final colonIndex = line.indexOf(':');
+
+      if (colonIndex == -1) {
+        return '';
+      }
+
+      return line.substring(colonIndex + 1).trim();
+    }
+
+    for (final entry in entries) {
+      if (entry.trim().isEmpty) {
+        continue;
+      }
+
+      String name = '';
+      String dose = '';
+      String frequency = '';
+      String times = '';
+      int numDays = 0;
+
+      final List<String> lines = entry.trim().split('\n');
+
+      for (final line in lines) {
+        final trimmedLine = line.trim();
+
+        if (trimmedLine.startsWith('Medication:')) {
+          name = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Dose:')) {
+          dose = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Frequency:')) {
+          frequency = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Times:')) {
+          times = valueAfterColon(trimmedLine);
+        } else if (trimmedLine.startsWith('Days:')) {
+          final daysPart = valueAfterColon(trimmedLine);
+
+          numDays =
+              int.tryParse(
+                daysPart.split('to').last.trim(),
+              ) ??
+              0;
+        }
+      }
+
+      if (name.isNotEmpty) {
+        newMeds.add(
+          Medication(
+            name: name,
+            dose: dose,
+            frequency: frequency,
+            times: times,
+            numDays: numDays,
+          ),
+        );
+      }
+    }
+
+    return newMeds;
+  }
+
+  /// Receives data from device and creates a new patient (Hardware implementation)
+  Future<void> receiveDataAndCreatePatient(BluetoothDevice device) async {
+    try {
+      List<BluetoothService> services = await device.discoverServices();
+      String receivedText = "";
+
+      for (var service in services) {
+        for (var characteristic in service.characteristics) {
+          // Property safety check to avoid PlatformException
+          if (characteristic.properties.read) {
+            List<int> value = await characteristic.read();
+            receivedText = String.fromCharCodes(value);
+
+            if (receivedText.isNotEmpty) {
+              final List<Medication> parsedMeds =_parseIncomingData(fakeDeviceData);
+
+              if (parsedMeds.isNotEmpty) {
+                context.read<ProviderCubit>().importPatientFromDevice(
+                displayName:
+                    device.platformName.isNotEmpty
+                        ? device.platformName
+                        : "New Patient",
+                deviceId: device.remoteId.toString(),
+                medications: parsedMeds,
+                prompts: const [],
+              );
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("New Patient Imported!"), backgroundColor: Colors.blue),
+                );
+                Navigator.pop(context);
+                return;
+              }
+            }
+          }
+        }
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No readable data found on this device.")),
+      );
+    } catch (e) {
+      debugPrint('Error receiving data: $e');
+    }
+  }
+  */
+
+  ///Request Bluetooth
+  Future<bool> requestBluetoothPermissions() async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+
+    final statuses = await [
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.locationWhenInUse,
+    ].request();
+
+    final bluetoothScanGranted =
+        statuses[Permission.bluetoothScan]?.isGranted ?? false;
+    final bluetoothConnectGranted =
+        statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+    final locationGranted =
+        statuses[Permission.locationWhenInUse]?.isGranted ?? false;
+
+    debugPrint("SCAN: ${statuses[Permission.bluetoothScan]}");
+    debugPrint("CONNECT: ${statuses[Permission.bluetoothConnect]}");
+    debugPrint("LOCATION: ${statuses[Permission.locationWhenInUse]}");
+
+    return bluetoothScanGranted && bluetoothConnectGranted && locationGranted;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BLE Scanner'),
-        actions: [
-          isScanning
-              ? IconButton(
-            icon: const Icon(Icons.stop),
-            onPressed: stopScanning, // Stop scanning
-          )
-              : IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: startScanning, // Start scanning
-          ),
-        ],
+        title: const Text('Device Configuration'),
       ),
       body: Column(
         children: [
-          // Top banner for connected device
+          // TEST SECTION: Simulated Import (Bypasses Bluetooth errors)
+          /*
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16.0),
+            color: Colors.orange.withOpacity(0.1),
+            child: Column(
+              children: [
+                const Text(
+                  "Testing Mode",
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.science),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange.shade800,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: simulateFakeImport,
+                    label: const Text("Simulate Device Import"),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          */
+          const Divider(height: 1),
+
+/*
           if (connectedDevice != null)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16.0),
-              color: Colors.green,
+              color: Colors.blueAccent,
               child: Text(
-                'Connected to: ${connectedDevice!.platformName.isNotEmpty ? connectedDevice!.platformName : "Unknown Device"}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                'Ready to configure: ${connectedDevice!.platformName.isNotEmpty ? connectedDevice!.platformName : "Device"}',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
             ),
+            */
           Expanded(
             child: scanResults.isEmpty
                 ? Center(
-              child: Text(
-                isScanning
-                    ? 'Scanning for devices...'
-                    : 'No devices found',
-                style: const TextStyle(fontSize: 18),
-              ),
-            )
+                    child: Text(isScanning
+                        ? 'Scanning for devices...'
+                        : 'No devices found'))
                 : ListView.builder(
-              itemCount: scanResults.length,
-              itemBuilder: (context, index) {
-                final device = scanResults[index].device;
-                final isConnected =
-                    connectedDevice?.remoteId == device.remoteId;
+                    itemCount: scanResults.length,
+                    itemBuilder: (context, index) {
+                      final device = scanResults[index].device;
+                      //final isConnected = connectedDevice?.remoteId == device.remoteId;
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
-                  elevation: 3,
-                  child: Column(
-                    children: [
-                      ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10, horizontal: 15),
-                        title: Text(
-                          device.platformName.isNotEmpty
-                              ? device.platformName
-                              : 'Unknown Device',
-                          style: const TextStyle(fontSize: 16),
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
                         ),
-                        subtitle: Text(
-                          device.remoteId.toString(),
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        trailing: ElevatedButton(
-                          onPressed: isConnected
-                              ? null
-                              : () => connectToDevice(device),
-                          child: Text(
-                              isConnected ? 'Connected' : 'Connect'),
-                        ),
-                      ),
-                      if (isConnected)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 15, vertical: 10),
-                          child: Column(
-                            children: [
-                              ElevatedButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          GetStartedPage(device: device),
-                                    ),
-                                  );
-                                },
-                                child: const Text('Configure Device'),
-                              ),
-                              const SizedBox(height: 10),
-                              ElevatedButton(
-                                onPressed: () =>
-                                    sendFileToDevice(device),
-                                child: const Text('Receive Data'),
-                              ),
-                            ],
+                        child: ListTile(
+                          title: Text(
+                            device.platformName.isNotEmpty
+                                ? device.platformName
+                                : 'Unknown Device',
+                          ),
+                          subtitle: Text(device.remoteId.toString()),
+                          trailing: ElevatedButton(
+                            onPressed: () => connectToDevice(device),
+                            child: const Text('Connect'),
                           ),
                         ),
-                    ],
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: isScanning ? stopScanning : startScanning,
+        onPressed: isScanning ? stopScanning : checkPermissionsThenStartScan,
         child: Icon(isScanning ? Icons.stop : Icons.search),
       ),
     );

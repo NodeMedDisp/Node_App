@@ -5,6 +5,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 
+import '../../../../models/medication.dart';
+import '../../../../models/counseling_question.dart';
 import '../../../core/widgets/already_have_account_text.dart';
 import '../../../core/widgets/login_and_signup_animated_form.dart';
 import '../../../core/widgets/progress_indicaror.dart';
@@ -27,7 +29,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
+          padding:
+              EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,6 +67,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       Navigator.of(context).pushNamedAndRemoveUntil(
                         Routes.homeScreen,
                         (route) => false,
+                        arguments: {
+                          'prompts': const <CounselingQuestion>[],
+                          'medications': const <Medication>[],
+                        },
                       );
                     } else if (state is IsNewUser) {
                       Navigator.of(context).pushNamedAndRemoveUntil(

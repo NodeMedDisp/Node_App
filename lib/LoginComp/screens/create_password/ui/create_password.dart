@@ -5,6 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../../models/medication.dart';
+import '../../../../models/counseling_question.dart';
 import '../../../core/widgets/login_and_signup_animated_form.dart';
 import '../../../core/widgets/progress_indicaror.dart';
 import '../../../core/widgets/terms_and_conditions_text.dart';
@@ -13,10 +15,10 @@ import '../../../routing/routes.dart';
 import '../../../theming/styles.dart';
 
 class CreatePassword extends StatelessWidget {
-  late GoogleSignInAccount googleUser;
-  late OAuthCredential credential;
+  final GoogleSignInAccount googleUser;
+  final OAuthCredential credential;
 
-  CreatePassword({
+  const CreatePassword({
     super.key,
     required this.googleUser,
     required this.credential,
@@ -28,7 +30,7 @@ class CreatePassword extends StatelessWidget {
       body: SafeArea(
         child: Padding(
           padding:
-          EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
+              EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
           child: Column(
             children: [
               Expanded(
@@ -66,7 +68,11 @@ class CreatePassword extends StatelessWidget {
                             if (!context.mounted) return;
                             Navigator.of(context).pushNamedAndRemoveUntil(
                               Routes.homeScreen,
-                                  (Route<dynamic> route) => false,
+                              (Route<dynamic> route) => false,
+                              arguments: {
+                                'prompts': const <CounselingQuestion>[],
+                                'medications': const <Medication>[],
+                              },
                             );
                           }
                         },

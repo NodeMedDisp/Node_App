@@ -1,0 +1,141 @@
+class CounselingQuestion {
+  final String? id;
+  final String prompt;
+  final String resReq;
+  final List<String> options;
+  final int numberOfDays;
+  final DateTime? startDate;
+
+  final bool streakEnabled;
+  final String streakTitle;
+  final String streakThreshold;
+
+  final bool tokenEnabled;
+  final String tokenTitle;
+  final String tokenThreshold;
+  final int tokenQuantity;
+
+  const CounselingQuestion({
+    this.id,
+    required this.prompt,
+    required this.resReq,
+    required this.options,
+    required this.numberOfDays,
+    this.startDate,
+    this.streakEnabled = false,
+    this.streakTitle = '',
+    this.streakThreshold = 'None',
+    this.tokenEnabled = false,
+    this.tokenTitle = '',
+    this.tokenThreshold = 'None',
+    this.tokenQuantity = 0,
+  });
+
+  CounselingQuestion copyWith({
+    String? id,
+    String? prompt,
+    String? resReq,
+    List<String>? options,
+    int? numberOfDays,
+    DateTime? startDate,
+    bool? streakEnabled,
+    String? streakTitle,
+    String? streakThreshold,
+    bool? tokenEnabled,
+    String? tokenTitle,
+    String? tokenThreshold,
+    int? tokenQuantity,
+  }) {
+    return CounselingQuestion(
+      id: id ?? this.id,
+      prompt: prompt ?? this.prompt,
+      resReq: resReq ?? this.resReq,
+      options: options ?? this.options,
+      numberOfDays: numberOfDays ?? this.numberOfDays,
+      startDate: startDate ?? this.startDate,
+      streakEnabled: streakEnabled ?? this.streakEnabled,
+      streakTitle: streakTitle ?? this.streakTitle,
+      streakThreshold: streakThreshold ?? this.streakThreshold,
+      tokenEnabled: tokenEnabled ?? this.tokenEnabled,
+      tokenTitle: tokenTitle ?? this.tokenTitle,
+      tokenThreshold: tokenThreshold ?? this.tokenThreshold,
+      tokenQuantity: tokenQuantity ?? this.tokenQuantity,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'prompt': prompt,
+      'resReq': resReq,
+      'options': options,
+      'numberOfDays': numberOfDays,
+      if (startDate != null) 'startDate': startDate!.toIso8601String(),
+      'streakEnabled': streakEnabled,
+      'streakTitle': streakTitle,
+      'streakThreshold': streakThreshold,
+      'tokenEnabled': tokenEnabled,
+      'tokenTitle': tokenTitle,
+      'tokenThreshold': tokenThreshold,
+      'tokenQuantity': tokenQuantity,
+    };
+  }
+
+  factory CounselingQuestion.fromJson(
+    Map<String, dynamic> json, {
+    String? id,
+  }) {
+    return CounselingQuestion(
+      id: id ?? json['id']?.toString(),
+      prompt: json['prompt']?.toString() ?? '',
+      resReq: json['resReq']?.toString() ?? '',
+      options: json['options'] is List
+          ? (json['options'] as List).map((item) => item.toString()).toList()
+          : <String>[],
+      numberOfDays: _readInt(json['numberOfDays']),
+      startDate: _readDate(json['startDate']),
+      streakEnabled: _readBool(json['streakEnabled']),
+      streakTitle: json['streakTitle']?.toString() ?? '',
+      streakThreshold:
+          json['streakThreshold']?.toString().trim().isNotEmpty == true
+              ? json['streakThreshold'].toString()
+              : 'None',
+      tokenEnabled: _readBool(json['tokenEnabled']),
+      tokenTitle: json['tokenTitle']?.toString() ?? '',
+      tokenThreshold:
+          json['tokenThreshold']?.toString().trim().isNotEmpty == true
+              ? json['tokenThreshold'].toString()
+              : 'None',
+      tokenQuantity: _readInt(json['tokenQuantity']),
+    );
+  }
+
+  static bool _readBool(dynamic value) {
+    if (value is bool) {
+      return value;
+    }
+
+    final normalized = value?.toString().trim().toLowerCase();
+
+    return normalized == 'true' || normalized == 'yes' || normalized == '1';
+  }
+
+  static int _readInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static DateTime? _readDate(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    return DateTime.tryParse(value.toString());
+  }
+}

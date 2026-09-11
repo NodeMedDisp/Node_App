@@ -5,8 +5,10 @@ import 'package:flutter_offline/flutter_offline.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // For saving user type
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../models/medication.dart';
+import '../../../../models/counseling_question.dart';
 import '../../../core/widgets/login_and_signup_animated_form.dart';
 import '../../../core/widgets/no_internet.dart';
 import '../../../core/widgets/progress_indicaror.dart';
@@ -28,8 +30,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _clinicCodeController = TextEditingController();
-  String _userType = 'User';  // Default is User
-  bool _showClinicCodeField = false;  // Controls whether the clinic code input appears
+  String _userType = 'User';
+  bool _showClinicCodeField = false;
 
   @override
   void initState() {
@@ -42,12 +44,12 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: OfflineBuilder(
         connectivityBuilder: (
-            BuildContext context,
-            List<ConnectivityResult> connectivity,
-            Widget child,
-            ) {
+          BuildContext context,
+          List<ConnectivityResult> connectivity,
+          Widget child,
+        ) {
           final bool connected = connectivity.any(
-                (result) => result != ConnectivityResult.none,
+            (result) => result != ConnectivityResult.none,
           );
           return connected ? _loginPage(context) : const BuildNoInternet();
         },
@@ -63,7 +65,8 @@ class _LoginScreenState extends State<LoginScreen> {
   SafeArea _loginPage(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
+        padding:
+            EdgeInsets.only(left: 30.w, right: 30.w, bottom: 15.h, top: 5.h),
         child: SingleChildScrollView(
           child: BlocConsumer<AuthCubit, AuthState>(
             buildWhen: (previous, current) => previous != current,
@@ -81,13 +84,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   desc: state.message,
                 ).show();
               } else if (state is UserSignIn) {
-                await _saveUserRole(_userType, _clinicCodeController.text);  // Save user role
+                await _saveUserRole(_userType, _clinicCodeController.text);
                 await Future.delayed(const Duration(seconds: 2));
                 if (!context.mounted) return;
-                context.pushNamedAndRemoveUntil(
-                  Routes.homeScreen,
-                  predicate: (route) => false,
-                );
+
+                if (_userType == 'Provider') {
+                  context.pushNamedAndRemoveUntil(
+                    Routes.providerMain,
+                    predicate: (route) => false,
+                    arguments: {
+                      'clinicCode': _clinicCodeController.text,
+                    },
+                  );
+                } else {
+                  context.pushNamedAndRemoveUntil(
+                    Routes.homeScreen,
+                    predicate: (route) => false,
+                    arguments: {
+                      'prompts': const <CounselingQuestion>[],
+                      'medications': const <Medication>[],
+                    },
+                  );
+                }
               } else if (state is UserNotVerified) {
                 AwesomeDialog(
                   context: context,
@@ -126,17 +144,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   Gap(10.h),
-
-                  // Node Logo
-                  SvgPicture.asset(
-                    'assets/images/NodeLogo.png', // Replace with your Node logo
+                  Image.asset(
+                    'assets/images/NodeLogo.png',
                     height: 100.h,
                     width: 200.w,
+                    fit: BoxFit.contain,
                   ),
-
                   Gap(10.h),
-
-                  // Add user type dropdown
                   DropdownButtonFormField<String>(
                     value: _userType,
                     onChanged: (String? newValue) {
@@ -145,7 +159,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         _showClinicCodeField = _userType == 'Provider';
                       });
                     },
-                    items: <String>['User', 'Provider'].map<DropdownMenuItem<String>>((String value) {
+                    items: <String>['User', 'Provider']
+                        .map<DropdownMenuItem<String>>((String value) {
                       return DropdownMenuItem<String>(
                         value: value,
                         child: Text(value),
@@ -161,13 +176,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderSide: BorderSide(color: Colors.black, width: 1.5),
                       ),
                       focusedBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                        borderSide: BorderSide(
+                            color: ColorsManager.mainBlue, width: 2.0),
                       ),
                     ),
                   ),
                   Gap(10.h),
-
-                  // Show clinic access code field only if 'Provider' is selected
                   if (_showClinicCodeField)
                     TextField(
                       controller: _clinicCodeController,
@@ -178,16 +192,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderSide: BorderSide(color: Colors.grey[400]!),
                         ),
                         enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.black, width: 1.5),
+                          borderSide:
+                              BorderSide(color: Colors.black, width: 1.5),
                         ),
                         focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                          borderSide: BorderSide(
+                              color: ColorsManager.mainBlue, width: 2.0),
                         ),
                       ),
                     ),
-
                   Gap(10.h),
-                  EmailAndPassword(),  // Existing email and password fields
+                  EmailAndPassword(),
                   Gap(10.h),
                   const SigninWithGoogleText(),
                   Gap(5.h),
@@ -214,7 +229,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Save the user role (user or provider) and clinic code to SharedPreferences
   Future<void> _saveUserRole(String userType, String clinicCode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userType', userType);

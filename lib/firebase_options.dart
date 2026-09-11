@@ -46,33 +46,35 @@ class DefaultFirebaseOptions {
     messagingSenderId: '771585564836',
     projectId: 'nodeapp2-27252',
     authDomain: 'nodeapp2-27252.firebaseapp.com',
-    storageBucket: 'nodeapp2-27252.appspot.com',
+    storageBucket: 'nodeapp2-27252.firebasestorage.app',
     measurementId: 'G-TGQ3W0JSCH',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC-kNpTFIOh3hKDR2IqgPorO5TxCJlELhI',
-    appId: '1:771585564836:android:501924e3ef45484cdf8631',
+    appId: '1:771585564836:android:c48e1201a06eee59df8631',
     messagingSenderId: '771585564836',
     projectId: 'nodeapp2-27252',
-    storageBucket: 'nodeapp2-27252.appspot.com',
+    storageBucket: 'nodeapp2-27252.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCs2vTb64slaTz3udjWOLHlzoMkkEd3wwY',
     appId: '1:771585564836:ios:67476fb50842d6fcdf8631',
     messagingSenderId: '771585564836',
     projectId: 'nodeapp2-27252',
-    storageBucket: 'nodeapp2-27252.appspot.com',
+    storageBucket: 'nodeapp2-27252.firebasestorage.app',
+    androidClientId:
+        '771585564836-96m8j3vt7vn6pvh4032ghor95sm8g9et.apps.googleusercontent.com',
     iosBundleId: 'com.example.nodeApp2',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyCs2vTb64slaTz3udjWOLHlzoMkkEd3wwY',
     appId: '1:771585564836:ios:67476fb50842d6fcdf8631',
     messagingSenderId: '771585564836',
     projectId: 'nodeapp2-27252',
-    storageBucket: 'nodeapp2-27252.appspot.com',
+    storageBucket: 'nodeapp2-27252.firebasestorage.app',
+    androidClientId:
+        '771585564836-96m8j3vt7vn6pvh4032ghor95sm8g9et.apps.googleusercontent.com',
     iosBundleId: 'com.example.nodeApp2',
   );
 
@@ -82,7 +84,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '771585564836',
     projectId: 'nodeapp2-27252',
     authDomain: 'nodeapp2-27252.firebaseapp.com',
-    storageBucket: 'nodeapp2-27252.appspot.com',
+    storageBucket: 'nodeapp2-27252.firebasestorage.app',
     measurementId: 'G-8MTD9P6HPZ',
   );
 }

@@ -15,7 +15,8 @@ class _BleScannerState extends State<BleScanner> {
 
   @override
   void dispose() {
-    scanSubscription?.cancel(); // Cancel the scan subscription to avoid memory leaks
+    scanSubscription
+        ?.cancel(); // Cancel the scan subscription to avoid memory leaks
     super.dispose();
   }
 
@@ -52,7 +53,8 @@ class _BleScannerState extends State<BleScanner> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Permissions Required'),
-          content: Text('Bluetooth and location permissions are required to scan for devices.'),
+          content: Text(
+              'Bluetooth and location permissions are required to scan for devices.'),
           actions: [
             TextButton(
               onPressed: () {
@@ -93,12 +95,15 @@ class _BleScannerState extends State<BleScanner> {
             // Ensure the device has a name (platformName) and is not already in the list
             if (!devicelist.contains(result.device.platformName) &&
                 result.device.platformName.isNotEmpty) {
-              if (mounted) { // Ensure the widget is still mounted before calling setState
+              if (mounted) {
+                // Ensure the widget is still mounted before calling setState
                 setState(() {
-                  devicelist.add(result.device.platformName); // Add device platformName to the list
+                  devicelist.add(result.device
+                      .platformName); // Add device platformName to the list
                 });
               }
-              print("Device found: ${result.device.platformName}"); // Print device platformName
+              print(
+                  "Device found: ${result.device.platformName}"); // Print device platformName
             }
           } catch (e) {
             // Log any errors that occur while processing the scan results
@@ -117,7 +122,8 @@ class _BleScannerState extends State<BleScanner> {
         if (!isScanning) {
           if (mounted) {
             setState(() {
-              this.isScanning = false; // Ensure the UI reflects the scanning state
+              this.isScanning =
+                  false; // Ensure the UI reflects the scanning state
             });
           }
         }
@@ -170,46 +176,48 @@ class _BleScannerState extends State<BleScanner> {
         actions: [
           isScanning
               ? IconButton(
-            icon: const Icon(Icons.stop),
-            onPressed: stopScanning, // Stop scanning
-          )
+                  icon: const Icon(Icons.stop),
+                  onPressed: stopScanning, // Stop scanning
+                )
               : IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: requestPermissions, // Check permissions before scanning
-          ),
+                  icon: const Icon(Icons.search),
+                  onPressed:
+                      requestPermissions, // Check permissions before scanning
+                ),
         ],
       ),
       body: devicelist.isEmpty && !isScanning
           ? Center(
-        child: Text(
-          'No devices found', // Show this only when the scan is not happening
-          style: const TextStyle(fontSize: 18),
-        ),
-      )
+              child: Text(
+                'No devices found', // Show this only when the scan is not happening
+                style: const TextStyle(fontSize: 18),
+              ),
+            )
           : isScanning
-          ? Center(
-        child: Text(
-          'Scanning for devices...', // Show this when scanning is active
-          style: const TextStyle(fontSize: 18),
-        ),
-      )
-          : ListView.builder(
-        itemCount: devicelist.length,
-        itemBuilder: (context, index) {
-          return ListTile(
-            title: Text(devicelist[index]),
-          );
-        },
-      ),
+              ? Center(
+                  child: Text(
+                    'Scanning for devices...', // Show this when scanning is active
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: devicelist.length,
+                  itemBuilder: (context, index) {
+                    return ListTile(
+                      title: Text(devicelist[index]),
+                    );
+                  },
+                ),
       floatingActionButton: isScanning
           ? FloatingActionButton(
-        onPressed: stopScanning,
-        child: const Icon(Icons.stop),
-      )
+              onPressed: stopScanning,
+              child: const Icon(Icons.stop),
+            )
           : FloatingActionButton(
-        onPressed: requestPermissions, // Check permissions before scanning
-        child: const Icon(Icons.search),
-      ),
+              onPressed:
+                  requestPermissions, // Check permissions before scanning
+              child: const Icon(Icons.search),
+            ),
     );
   }
 }

@@ -10,9 +10,11 @@ import 'summary_screen.dart';
 import '/../../LoginComp/theming/styles.dart';
 import '/../../LoginComp/theming/colors.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // Import FlutterBluePlus
+import '../models/medication.dart';
+import '../models/counseling_question.dart';
 
 class CounselingQuestionScreen extends StatefulWidget {
-  final List<Map<String, String>> medications;
+  final List<Medication> medications;
   final BluetoothDevice? device;
 
   const CounselingQuestionScreen({
@@ -47,7 +49,8 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
       );
     } on MissingPluginException catch (e) {
       // Plugin not registered for this platform — skip gracefully
-      print('MissingPluginException while saving response: $e — skipping file write.');
+      print(
+          'MissingPluginException while saving response: $e — skipping file write.');
       return;
     } on PlatformException catch (e) {
       // Platform channel error — log and continue
@@ -67,6 +70,9 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
     await _saveResponseToFile(_selectedOption!);
 
     if (_selectedOption == 'Yes') {
+      debugPrint(
+        'TRACE 4 COUNSELING CHOICE -> NEXT: ${widget.device?.remoteId}',
+      );
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -99,7 +105,8 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
               style: TextStyle(fontSize: 18.sp),
             ),
             SizedBox(height: 20.h),
-            _buildOptionButton("Yes, the counselor will enter daily prompts.", "Yes"),
+            _buildOptionButton(
+                "Yes, the counselor will enter daily prompts.", "Yes"),
             SizedBox(height: 20.h),
             _buildOptionButton(
                 "No, the patient does not have a mental health counseling plan",
@@ -143,9 +150,9 @@ class _CounselingQuestionScreenState extends State<CounselingQuestionScreen> {
 }
 
 class NoCounselingScreen extends StatelessWidget {
-  final List<Map<String, String>> medications;
+  final List<Medication> medications;
   final BluetoothDevice? device;
-  final List<Map<String, String>> prompts = []; // Empty activities list
+  final List<CounselingQuestion> prompts = []; // Empty activities list
 
   NoCounselingScreen({super.key, required this.medications, this.device});
 

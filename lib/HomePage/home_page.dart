@@ -7,10 +7,15 @@ import '/../LoginComp/logic/cubit/auth_cubit.dart'; // Import your AuthCubit
 import '/../LoginComp/screens/login/ui/login_screen.dart'; // Import your LoginScreen
 import '/HomePage/calendar_widg.dart'; // Import your CalendarWidget
 import '/../Bluetooth/bluetooth_trial.dart'; // Import the Bluetooth Setup Screen
+import '../models/medication.dart';
+import '../models/counseling_question.dart';
+import '../GetStarted/enter_medication_data.dart';
+import '../GetStarted/counseling_questions_screen.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class HomePage extends StatefulWidget {
-  final List<Map<String, dynamic>> prompts;
-  final List<Map<String, String>> medications;
+  final List<CounselingQuestion> prompts;
+  final List<Medication> medications;
 
   const HomePage({
     super.key,
@@ -26,6 +31,7 @@ class _HomePageState extends State<HomePage> {
   final DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   bool isBluetoothConnected = false; // Track Bluetooth connection status
+  BluetoothDevice? selectedBluetoothDevice;
 
   @override
   void initState() {
@@ -34,23 +40,93 @@ class _HomePageState extends State<HomePage> {
   }
 
   // Check Bluetooth connection status
-  void _checkBluetoothConnection() async {
-    // Get the connected devices
-    List<BluetoothDevice> connectedDevices = await FlutterBluePlus.connectedDevices;
+  Future<void> _checkBluetoothConnection() async {
+    try {
+      final connectedDevices = await FlutterBluePlus.connectedDevices;
 
-    if (connectedDevices.isNotEmpty) {
-      setState(() {
-        isBluetoothConnected = true; // Mark as connected if any devices found
-      });
-    } else {
-      setState(() {
-        isBluetoothConnected = false; // No connected devices
-      });
+      if (!mounted) return;
 
-      // If not connected, show the pairing dialog
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showBluetoothDialog();
+      if (connectedDevices.isNotEmpty) {
+        final BluetoothDevice restoredDevice = connectedDevices.first;
+
+        setState(() {
+          selectedBluetoothDevice = restoredDevice;
+          isBluetoothConnected = true;
+        });
+
+        debugPrint(
+          'HOME: Restored connected device '
+          '${restoredDevice.remoteId}',
+        );
+      } else {
+        setState(() {
+          selectedBluetoothDevice = null;
+          isBluetoothConnected = false;
+        });
+
+        debugPrint('HOME: No connected Bluetooth device found');
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showBluetoothDialog();
+          }
+        });
+      }
+    } catch (error, stackTrace) {
+      debugPrint('HOME: Bluetooth connection check failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      setState(() {
+        selectedBluetoothDevice = null;
+        isBluetoothConnected = false;
       });
+    }
+  }
+
+  Future<BluetoothDevice?> _getConnectedProgrammingDevice() async {
+    try {
+      final List<BluetoothDevice> connectedDevices =
+          await FlutterBluePlus.connectedDevices;
+
+      if (connectedDevices.isEmpty) {
+        debugPrint('PROGRAMMING DEVICE: No connected device found');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No Bluetooth device is connected. Connect the NODE device first.',
+              ),
+            ),
+          );
+        }
+
+        return null;
+      }
+
+      final BluetoothDevice device = connectedDevices.first;
+
+      debugPrint(
+        'PROGRAMMING DEVICE FOUND: '
+        '${device.platformName} — ${device.remoteId}',
+      );
+
+      return device;
+    } catch (error, stackTrace) {
+      debugPrint('Could not get connected Bluetooth device: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not access Bluetooth device: $error'),
+          ),
+        );
+      }
+
+      return null;
     }
   }
 
@@ -70,20 +146,25 @@ class _HomePageState extends State<HomePage> {
           content: const Text('Pair a device to configure or view data.'),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                Navigator.push(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close the dialog first
+
+                final device = await Navigator.push<BluetoothDevice>(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => BLEScannerWidget(), // Navigate to Bluetooth setup page
+                    builder: (context) => const BLEScannerWidget(),
                   ),
                 );
+
+                if (device != null) {
+                  setState(() {
+                    selectedBluetoothDevice = device;
+                    isBluetoothConnected = true;
+                  });
+
+                  debugPrint(
+                      "DEBUG: HomePage stored BLE device: ${device.remoteId}");
+                }
               },
               child: const Text('Pair Device'),
             ),
@@ -110,12 +191,23 @@ class _HomePageState extends State<HomePage> {
           actions: [
             IconButton(
               icon: const Icon(Icons.bluetooth),
-              onPressed: () {
+              onPressed: () async {
                 // Navigate to Bluetooth setup page when the icon is clicked
-                Navigator.push(
+                final device = await Navigator.push<BluetoothDevice>(
                   context,
-                  MaterialPageRoute(builder: (context) => BLEScannerWidget()),
+                  MaterialPageRoute(
+                      builder: (context) => const BLEScannerWidget()),
                 );
+
+                if (device != null) {
+                  setState(() {
+                    selectedBluetoothDevice = device;
+                    isBluetoothConnected = true;
+                  });
+
+                  debugPrint(
+                      "DEBUG: HomePage stored BLE device: ${device.remoteId}");
+                }
               },
             ),
             IconButton(
@@ -139,7 +231,8 @@ class _HomePageState extends State<HomePage> {
                 SizedBox(height: 10.h),
                 Text(
                   "Welcome to Node Recovery!",
-                  style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.bold),
+                  style:
+                      TextStyle(fontSize: 24.sp, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 20.h),
                 SizedBox(
@@ -153,20 +246,36 @@ class _HomePageState extends State<HomePage> {
                 SizedBox(height: 20.h),
                 ElevatedButton(
                   onPressed: () async {
-                    final connectedDevices = await FlutterBluePlus.connectedSystemDevices;
+                    final BluetoothDevice? device = selectedBluetoothDevice;
 
-                    if (connectedDevices.isNotEmpty) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => GetStartedPage(device: connectedDevices.first),
+                    debugPrint(
+                      'HOME -> GET STARTED: '
+                      '${device?.remoteId ?? 'NULL DEVICE'}',
+                    );
+
+                    if (device == null) {
+                      if (!mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'No Bluetooth device is selected. Connect to the device first.',
+                          ),
                         ),
                       );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('No Bluetooth device found')),
-                      );
+
+                      return;
                     }
+                    debugPrint(
+                      'TRACE 1 HOME -> GET STARTED: ${device.remoteId}',
+                    );
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => GetStartedPage(
+                          device: device,
+                        ),
+                      ),
+                    );
                   },
                   child: const Text('Go to Get Started'),
                 ),
