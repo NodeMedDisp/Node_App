@@ -9,18 +9,27 @@ import '/../../LoginComp/theming/colors.dart';
 import 'counseling_questions_screen.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../models/medication.dart';
+import '../models/medication_schedule.dart';
 
 class EnterPrescriptionData extends StatefulWidget {
   final BluetoothDevice? device;
+  final List<Medication> existingMedications;
+  final DateTime? fallbackStartDate;
 
-  const EnterPrescriptionData({super.key, this.device});
+  const EnterPrescriptionData({
+    super.key,
+    this.device,
+    this.existingMedications = const [],
+    this.fallbackStartDate,
+  });
 
   @override
   _EnterPrescriptionDataState createState() => _EnterPrescriptionDataState();
 }
 
 class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
-  final TextEditingController _medicationController = TextEditingController();
+  final TextEditingController _medicationController =
+      TextEditingController(text: 'Methadone');
   final TextEditingController _doseController = TextEditingController();
   final TextEditingController _daysController = TextEditingController();
   final TextEditingController _streakTitleController = TextEditingController();
@@ -32,13 +41,39 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
   bool _tokenEnabled = false;
 
   String? _errorMessage;
-  String? _frequency;
+  String? _frequency = 'Once daily';
   List<String> _times = [];
   List<Medication> medications = [];
-  int _numTimesPerDay = 0;
-  List<TimeOfDay?> _selectedTimes = [];
+  int _numTimesPerDay = 1;
+  List<TimeOfDay?> _selectedTimes = [null];
+  DateTime _startDate = DateUtils.dateOnly(DateTime.now());
+  bool _saving = false;
+  String? _patientAtOpen;
+
+  @override
+  void initState() {
+    super.initState();
+    medications = List<Medication>.of(widget.existingMedications);
+    try {
+      _patientAtOpen = context.read<ProviderCubit>().state.selectedUser?.id;
+    } catch (_) {
+      // The patient setup flow has no provider cubit.
+    }
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100, 12, 31),
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _startDate = DateUtils.dateOnly(picked));
+  }
 
   Future<void> _addMedication() async {
+    if (_saving) return;
     final medicationName = _medicationController.text.trim();
     final dose = _doseController.text.trim();
     final numberOfDays = int.tryParse(_daysController.text.trim());
@@ -88,15 +123,16 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
 
     final formattedTimes = _selectedTimes
         .whereType<TimeOfDay>()
-        .map((time) => time.format(context))
+        .map((time) => MedicationSchedule.clock(time.hour, time.minute))
         .toList();
 
     final newMed = Medication(
       name: medicationName,
-      frequency: _frequency!,
+      frequency: 'Once daily',
       dose: dose,
       times: formattedTimes.join(', '),
       numDays: numberOfDays,
+      startDate: _startDate,
 
       // Medication rewards happen when the medication event occurs.
       streakEnabled: _streakEnabled,
@@ -117,7 +153,25 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
       providerCubit = null;
     }
 
+    if (providerCubit != null &&
+        providerCubit.state.selectedUser?.id != _patientAtOpen) {
+      _showError('The selected patient changed. Close this form and open it again.');
+      return;
+    }
+    try {
+      MedicationSchedule.validateCandidate(
+        newMed,
+        providerCubit?.state.selectedMedications ?? medications,
+        fallbackStartDate: providerCubit?.state.selectedUser?.startDate ??
+            widget.fallbackStartDate,
+      );
+    } on MedicationScheduleException catch (error) {
+      _showError(error.message);
+      return;
+    }
+
     if (providerCubit != null) {
+      setState(() => _saving = true);
       try {
         debugPrint(
           'PROVIDER MEDICATION FORM: '
@@ -150,6 +204,8 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
         setState(() {
           _errorMessage = 'Could not save medication: $error';
         });
+      } finally {
+        if (mounted) setState(() => _saving = false);
       }
 
       return;
@@ -158,13 +214,13 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     setState(() {
       medications.add(newMed);
 
-      _medicationController.clear();
+      _medicationController.text = 'Methadone';
       _doseController.clear();
       _daysController.clear();
 
-      _frequency = null;
-      _numTimesPerDay = 0;
-      _selectedTimes = [];
+      _frequency = 'Once daily';
+      _numTimesPerDay = 1;
+      _selectedTimes = [null];
       _times = [];
 
       _streakEnabled = false;
@@ -189,7 +245,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
       context: context,
       initialTime: TimeOfDay.now(),
     );
-    if (picked != null) {
+    if (mounted && picked != null && index < _selectedTimes.length) {
       setState(() {
         _selectedTimes[index] = picked;
       });
@@ -292,8 +348,9 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
             children: [
               TextField(
                 controller: _medicationController,
+                readOnly: true,
                 decoration: InputDecoration(
-                  labelText: "Medication Name",
+                  labelText: "Medication Name (Methadone only)",
                   labelStyle: TextStyles.font14Hint500Weight,
                   border: const OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.black, width: 1.5),
@@ -345,9 +402,6 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 value: _frequency,
                 items: [
                   'Once daily',
-                  'Twice daily',
-                  'Three times daily',
-                  'Custom'
                 ]
                     .map((freq) =>
                         DropdownMenuItem(value: freq, child: Text(freq)))
@@ -405,11 +459,21 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                 ),
                 SizedBox(height: 20.h),
               ],
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Start Date'),
+                subtitle: Text(MedicationSchedule.dateLabel(_startDate)),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: _saving ? null : _pickStartDate,
+              ),
+              SizedBox(height: 12.h),
               TextField(
                 controller: _daysController,
                 keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: InputDecoration(
                   labelText: "Number of Days",
+                  helperText: 'Includes the start date. One event on each day.',
                   labelStyle: TextStyles.font14Hint500Weight,
                   border: OutlineInputBorder(
                       borderSide: BorderSide(color: Colors.grey[400]!)),
@@ -460,7 +524,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _addMedication,
+                  onPressed: _saving ? null : _addMedication,
                   style: ElevatedButton.styleFrom(
                     padding: EdgeInsets.symmetric(vertical: 15.h),
                     backgroundColor: ColorsManager.mainBlue,
@@ -489,10 +553,16 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => MedicationEntryPage(
-                                    medication: medications[index]),
+                                  medication: medications[index],
+                                  otherMedications: [
+                                    for (var i = 0; i < medications.length; i++)
+                                      if (i != index) medications[i],
+                                  ],
+                                  fallbackStartDate: widget.fallbackStartDate,
+                                ),
                               ),
                             );
-                            if (updatedMedication != null) {
+                            if (mounted && updatedMedication != null) {
                               setState(() {
                                 medications[index] = updatedMedication;
                               });

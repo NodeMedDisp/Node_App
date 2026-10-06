@@ -9,6 +9,7 @@ import '../LoginComp/logic/provider/provider_state.dart';
 import '../LoginComp/routing/routes.dart';
 import '../Bluetooth/bluetooth_trial.dart';
 import '../models/counseling_question.dart';
+import '../models/medication_schedule.dart';
 import 'provider_program_editor_screen.dart';
 import '../Bluetooth/node_ble_file_transfer_service.dart';
 import '../Bluetooth/recovery_program_file_formatter.dart';
@@ -23,8 +24,8 @@ class ProviderMainScreen extends StatefulWidget {
 }
 
 class _ProviderMainScreenState extends State<ProviderMainScreen> {
-  final GlobalKey<CalendarWidgetState> _calendarKey =
-      GlobalKey<CalendarWidgetState>();
+  int _calendarRefreshToken = 0;
+  bool _sending = false;
 
   Future<void> _showCreatePatientDialog() async {
     final formKey = GlobalKey<FormState>();
@@ -240,6 +241,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
   Future<void> _sendSelectedPatientProgram(
     BluetoothDevice device,
   ) async {
+    if (_sending) return;
     final state = context.read<ProviderCubit>().state;
     final selectedPatient = state.selectedUser;
 
@@ -296,11 +298,17 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
       return;
     }
 
-    final fileContent =
-        RecoveryProgramFileFormatter.build(
-      medications: state.selectedMedications,
-      prompts: activePrompts,
-    );
+    final String fileContent;
+    try {
+      fileContent = RecoveryProgramFileFormatter.build(
+        medications: state.selectedMedications,
+        prompts: activePrompts,
+        fallbackStartDate: patientStartDate,
+      );
+    } on MedicationScheduleException catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
 
     debugPrint(
       'PROVIDER BLE: Sending program '
@@ -316,6 +324,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
       '==========================================',
     );
 
+    setState(() => _sending = true);
     try {
       await const NodeBleFileTransferService().send(
         device: device,
@@ -335,7 +344,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
         ),
       );
 
-      await _calendarKey.currentState?.checkBluetoothConnection();
+      setState(() => _calendarRefreshToken++);
     } catch (error, stackTrace) {
       debugPrint('PROVIDER BLE ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -352,6 +361,8 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
           ),
         ),
       );
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -366,10 +377,10 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.bluetooth),
-            color: _calendarKey.currentState?.isBluetoothConnected == true
+            color: FlutterBluePlus.connectedDevices.isNotEmpty
                 ? Colors.blue
                 : Colors.grey,
-            onPressed: () async {
+            onPressed: _sending ? null : () async {
               final connectedDevices = FlutterBluePlus.connectedDevices;
 
               if (connectedDevices.isEmpty) {
@@ -559,7 +570,8 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                           ),
                         )
                       : CalendarWidget(
-                          key: _calendarKey,
+                          key: ValueKey('provider:${widget.clinicCode}:${selectedUser.id}'),
+                          bluetoothRefreshToken: _calendarRefreshToken,
                           dataOwnerId: selectedUser.id,
                           prompts: state.selectedPrompts,
                           medications: state.selectedMedications,

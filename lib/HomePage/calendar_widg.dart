@@ -18,6 +18,8 @@ import 'dart:async';
 import 'package:path_provider/path_provider.dart';
 import '../models/medication.dart';
 import '../models/counseling_question.dart';
+import '../models/medication_schedule.dart';
+import 'recovery_cache_codec.dart';
 
 class CalendarWidget extends StatefulWidget {
   final List<CounselingQuestion> prompts;
@@ -29,6 +31,7 @@ class CalendarWidget extends StatefulWidget {
   /// Identifies whose data is currently being displayed.
   /// For provider mode this is the selected Firestore patient ID.
   final String? dataOwnerId;
+  final int bluetoothRefreshToken;
 
   const CalendarWidget({
     super.key,
@@ -38,6 +41,7 @@ class CalendarWidget extends StatefulWidget {
     this.externalFocusDay,
     this.externalRecoveryProgress,
     this.dataOwnerId,
+    this.bluetoothRefreshToken = 0,
   });
 
   @override
@@ -50,6 +54,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
   bool isBluetoothConnected = false;
   BluetoothCharacteristic? fileCharacteristic;
   StreamSubscription<List<int>>? _bleValueSubscription;
+  int _bleDiscoveryGeneration = 0;
   String fileContent = "";
 
   Map<DateTime, List<Map<String, dynamic>>> recoveryProgress = {};
@@ -205,6 +210,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
 
   @override
   void dispose() {
+    _bleDiscoveryGeneration++;
     _bleValueSubscription?.cancel();
     super.dispose();
   }
@@ -240,6 +246,9 @@ class CalendarWidgetState extends State<CalendarWidget> {
   @override
   void didUpdateWidget(covariant CalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.bluetoothRefreshToken != widget.bluetoothRefreshToken) {
+      unawaited(checkBluetoothConnection());
+    }
 
     final patientChanged = oldWidget.dataOwnerId != widget.dataOwnerId;
 
@@ -315,24 +324,11 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   List<Medication> _getMedicationsForDay(DateTime day) {
-    return widget.medications.where((medication) {
-      final numDays = medication.numDays;
-      if (numDays == 0) return false;
-
-      final medicationStartDay = medication.startDate ?? widget.StartDate;
-      final lastMedicationDay =
-          medicationStartDay.add(Duration(days: numDays - 1));
-
-      final normalizedDay = DateTime(day.year, day.month, day.day);
-      final normalizedStart = DateTime(medicationStartDay.year,
-          medicationStartDay.month, medicationStartDay.day);
-      final normalizedEnd = DateTime(lastMedicationDay.year,
-          lastMedicationDay.month, lastMedicationDay.day);
-
-      return normalizedDay
-              .isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
-          normalizedDay.isBefore(normalizedEnd.add(const Duration(days: 1)));
-    }).toList();
+    return widget.medications.where((medication) => MedicationSchedule.isActive(
+      medication,
+      day,
+      fallbackStartDate: widget.StartDate,
+    )).toList();
   }
 
   bool _hasScheduledItemsForDay(DateTime day) {
@@ -341,17 +337,22 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   Future<void> checkBluetoothConnection() async {
-    final List<BluetoothDevice> connectedDevices =
-        FlutterBluePlus.connectedDevices;
-    if (connectedDevices.isNotEmpty) {
-      setState(() {
-        isBluetoothConnected = true;
-      });
-      await _discoverServices(connectedDevices.first);
-    } else {
-      setState(() {
-        isBluetoothConnected = false;
-      });
+    if (!mounted) return;
+    try {
+      final connectedDevices = FlutterBluePlus.connectedDevices;
+      setState(() => isBluetoothConnected = connectedDevices.isNotEmpty);
+      if (connectedDevices.isNotEmpty) {
+        await _discoverServices(connectedDevices.first);
+      } else {
+        _bleDiscoveryGeneration++;
+        final oldSubscription = _bleValueSubscription;
+        _bleValueSubscription = null;
+        await oldSubscription?.cancel();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('CALENDAR: Bluetooth discovery failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) setState(() => isBluetoothConnected = false);
     }
   }
 
@@ -365,29 +366,41 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   void _loadRecoveryProgress() {
-    final box = Hive.box<Map>('calendarData');
-    final keys = box.keys;
-    for (final key in keys) {
-      final data = box.get(key);
-      if (data != null && data['progress'] != null) {
-        final date = DateTime.parse(key as String);
-        recoveryProgress[date] =
-            List<Map<String, dynamic>>.from(data['progress']);
-      }
+    try {
+      final box = Hive.box<Map>('calendarData');
+      recoveryProgress.addAll(RecoveryCacheCodec.decode(
+        {for (final key in box.keys) key: box.get(key)},
+        onWarning: (message) => debugPrint('CALENDAR CACHE: $message'),
+      ));
+      debugPrint('CALENDAR CACHE: Loaded ${recoveryProgress.length} days without clearing storage.');
+    } catch (error, stackTrace) {
+      // Keep the saved box intact. A bad local record must not abort widget mounting.
+      debugPrint('CALENDAR CACHE: Could not read saved progress; data retained: $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
   Future<void> _discoverServices(BluetoothDevice device) async {
-    List<BluetoothService> services = await device.discoverServices();
-    for (var service in services) {
-      for (var characteristic in service.characteristics) {
+    final generation = ++_bleDiscoveryGeneration;
+    final services = await device.discoverServices();
+    if (!mounted || generation != _bleDiscoveryGeneration) return;
+    for (final service in services) {
+      for (final characteristic in service.characteristics) {
+        if (!mounted || generation != _bleDiscoveryGeneration) return;
         if (characteristic.properties.notify) {
           await characteristic.setNotifyValue(true);
-          await _bleValueSubscription?.cancel();
+          if (!mounted || generation != _bleDiscoveryGeneration) return;
+          final oldSubscription = _bleValueSubscription;
+          _bleValueSubscription = null;
+          await oldSubscription?.cancel();
+          if (!mounted || generation != _bleDiscoveryGeneration) return;
           _bleValueSubscription = characteristic.lastValueStream.listen(
             (data) {
-              _handleFileData(data);
+              if (mounted && generation == _bleDiscoveryGeneration) {
+                _handleFileData(data);
+              }
             },
+            onError: (Object error) => debugPrint('CALENDAR BLE: $error'),
           );
         }
       }
@@ -395,6 +408,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   void _handleFileData(List<int> data) {
+    if (!mounted) return;
     setState(() {
       String chunk = utf8.decode(data);
       fileContent += chunk;
@@ -533,7 +547,13 @@ class CalendarWidgetState extends State<CalendarWidget> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const GetStartedPage()),
+                            builder: (_) => GetStartedPage(
+                              device: FlutterBluePlus.connectedDevices.isEmpty
+                                  ? null : FlutterBluePlus.connectedDevices.first,
+                              existingMedications: widget.medications,
+                              fallbackStartDate: widget.StartDate,
+                            ),
+                          ),
                         );
                       },
                       child: const Text('Go to Setup'),
@@ -551,8 +571,18 @@ class CalendarWidgetState extends State<CalendarWidget> {
                             builder: (_) => cubit != null
                                 ? BlocProvider.value(
                                     value: cubit,
-                                    child: const EnterPrescriptionData())
-                                : const EnterPrescriptionData(),
+                                    child: EnterPrescriptionData(
+                                      device: FlutterBluePlus.connectedDevices.isEmpty
+                                          ? null : FlutterBluePlus.connectedDevices.first,
+                                      existingMedications: widget.medications,
+                                      fallbackStartDate: widget.StartDate,
+                                    ))
+                                : EnterPrescriptionData(
+                                    device: FlutterBluePlus.connectedDevices.isEmpty
+                                        ? null : FlutterBluePlus.connectedDevices.first,
+                                    existingMedications: widget.medications,
+                                    fallbackStartDate: widget.StartDate,
+                                  ),
                           ),
                         );
                       },

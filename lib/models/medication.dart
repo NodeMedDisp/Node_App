@@ -139,7 +139,15 @@ class Medication {
     if (value is DateTime) {
       return value;
     }
-
-    return DateTime.tryParse(value.toString());
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    // Support Firestore Timestamp without adding a Flutter dependency to this model.
+    try {
+      final converted = value.toDate();
+      return converted is DateTime ? converted.toLocal() : null;
+    } catch (_) {
+      return null;
+    }
   }
 }

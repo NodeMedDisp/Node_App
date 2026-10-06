@@ -1,5 +1,6 @@
 import '../models/counseling_question.dart';
 import '../models/medication.dart';
+import '../models/medication_schedule.dart';
 
 /// Generates the exact configuration-file format understood by NODE.
 ///
@@ -14,14 +15,23 @@ class RecoveryProgramFileFormatter {
     required List<Medication> medications,
     required List<CounselingQuestion> prompts,
     DateTime? generatedAt,
+    DateTime? fallbackStartDate,
   }) {
     final timestamp = generatedAt ?? DateTime.now();
+    final transferMedications = MedicationSchedule.forLegacyTransfer(
+      medications,
+      now: timestamp,
+      fallbackStartDate: fallbackStartDate,
+    );
+    if (medications.isNotEmpty && transferMedications.isEmpty && prompts.isEmpty) {
+      throw const MedicationScheduleException('Nothing sent. There is no active medication today.');
+    }
     final buffer = StringBuffer();
 
     buffer.writeln('Current Time: ${_formatDateTime(timestamp)}');
     buffer.writeln();
 
-    for (final medication in medications) {
+    for (final medication in transferMedications) {
       buffer.writeln('Medication: ${medication.name}');
       buffer.writeln('Dose: ${medication.dose}');
       buffer.writeln('Frequency: ${medication.frequency}');

@@ -33,6 +33,7 @@ class RecoverySummaryScreen extends StatefulWidget {
 
 class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
   DateTime StartDate = DateTime.now();
+  bool _sending = false;
 
   @override
   void initState() {
@@ -104,31 +105,34 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () async {
-              final fileContent = await _saveDataToFile();
-              print("SUMMARY DEVICE: ${widget.device?.remoteId}");
-
-              if (widget.device != null) {
-                print(
-                    "BLE mode: sending file to connected device ${widget.device!.remoteId}");
-                await sendFileToDevice(widget.device!, fileContent);
-              } else {
-                print(
-                    "ERROR: No BluetoothDevice was passed into RecoverySummaryScreen.");
-                print(
-                    "BLE transmission skipped because widget.device is null.");
+            onPressed: _sending ? null : () async {
+              setState(() => _sending = true);
+              try {
+                final device = widget.device;
+                if (device == null) {
+                  throw StateError('No NODE device is connected. Nothing was sent.');
+                }
+                final fileContent = await _saveDataToFile();
+                await sendFileToDevice(device, fileContent);
+                if (!context.mounted) return;
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  Routes.homeScreen,
+                  (route) => false,
+                  arguments: {
+                    'prompts': widget.prompts,
+                    'medications': widget.medications,
+                  },
+                );
+              } catch (error, stackTrace) {
+                debugPrint('SUMMARY: Program not sent: $error');
+                debugPrintStack(stackTrace: stackTrace);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+                }
+              } finally {
+                if (mounted) setState(() => _sending = false);
               }
-
-              if (!context.mounted) return;
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                Routes.homeScreen,
-                (route) => false,
-                arguments: {
-                  'prompts': widget.prompts,
-                  'medications': widget.medications,
-                },
-              );
             },
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 15),

@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../theming/colors.dart';
 import '../../theming/styles.dart';
-import 'package:intl/intl.dart';
 import '../../../models/medication.dart';
+import '../../../models/medication_schedule.dart';
 
 class MedicationEntryPage extends StatefulWidget {
   final Medication? medication; // null = add mode
+  final List<Medication> otherMedications;
+  final DateTime? fallbackStartDate;
 
-  const MedicationEntryPage({super.key, this.medication});
+  const MedicationEntryPage({
+    super.key,
+    this.medication,
+    this.otherMedications = const [],
+    this.fallbackStartDate,
+  });
 
   @override
   _MedicationEntryPageState createState() => _MedicationEntryPageState();
@@ -19,45 +26,80 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
   final TextEditingController _doseController = TextEditingController();
   final TextEditingController _daysController = TextEditingController();
 
-  String? _frequency;
-  int _numTimesPerDay = 0;
-  List<TimeOfDay?> _selectedTimes = [];
+  String? _frequency = 'Once daily';
+  int _numTimesPerDay = 1;
+  List<TimeOfDay?> _selectedTimes = [null];
+  late DateTime _startDate;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-
-    if (widget.medication != null) {
-      // Pre-fill basic fields
-      _medicationController.text = widget.medication!.name;
-      _doseController.text = widget.medication!.dose;
-      _daysController.text = widget.medication!.numDays.toString();
-      _frequency = widget.medication!.frequency;
-
-      // Pre-fill times
-      final timesString = widget.medication!.times;
-      if (timesString.isNotEmpty) {
-        final timeStrings = timesString.split(',');
-
-        final locale = WidgetsBinding.instance.platformDispatcher.locale;
-        final formatter = DateFormat.jm(locale.toString());
-
-        _selectedTimes = timeStrings.map((raw) {
-          final t = raw.trim();
-          try {
-            final dt = formatter.parse(t);
-            return TimeOfDay(hour: dt.hour, minute: dt.minute);
-          } catch (_) {
-            return null;
-          }
-        }).toList();
-
-        _numTimesPerDay = _selectedTimes.length;
-      } else {
-        _selectedTimes = [];
-        _numTimesPerDay = 0;
-      }
+    final original = widget.medication;
+    // Never silently relabel an existing medication or copy its dose to a new drug.
+    _medicationController.text = original?.name ?? 'Methadone';
+    _doseController.text = original?.dose ?? '';
+    _daysController.text = original?.numDays.toString() ?? '';
+    _startDate = DateUtils.dateOnly(
+      original?.startDate ?? widget.fallbackStartDate ?? DateTime.now(),
+    );
+    final minute = original == null ? null : MedicationSchedule.minutes(original.times);
+    if (minute != null) {
+      _selectedTimes = [TimeOfDay(hour: minute ~/ 60, minute: minute % 60)];
+    } else if (original != null) {
+      _errorMessage = 'This entry needs one daily time. Select a single time before saving.';
     }
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(_startDate.year < 2000 ? _startDate.year : 2000),
+      lastDate: DateTime(_startDate.year > 2100 ? _startDate.year : 2100, 12, 31),
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _startDate = DateUtils.dateOnly(picked));
+  }
+
+  void _save() {
+    final chosen = _selectedTimes.single;
+    final original = widget.medication;
+    final values = Medication(
+      name: _medicationController.text.trim(),
+      dose: _doseController.text.trim(),
+      frequency: 'Once daily',
+      times: chosen == null ? '' : MedicationSchedule.clock(chosen.hour, chosen.minute),
+      numDays: int.tryParse(_daysController.text.trim()) ?? 0,
+      startDate: _startDate,
+    );
+    final updated = original == null ? values : original.copyWith(
+      name: values.name,
+      dose: values.dose,
+      frequency: values.frequency,
+      times: values.times,
+      numDays: values.numDays,
+      startDate: values.startDate,
+    );
+    try {
+      MedicationSchedule.validateCandidate(
+        updated,
+        widget.otherMedications,
+        fallbackStartDate: widget.fallbackStartDate,
+      );
+    } on MedicationScheduleException catch (error) {
+      setState(() => _errorMessage = error.message);
+      return;
+    }
+    Navigator.pop(context, updated);
+  }
+
+  @override
+  void dispose() {
+    _medicationController.dispose();
+    _doseController.dispose();
+    _daysController.dispose();
+    super.dispose();
   }
 
   Future<void> _pickTime(int index) async {
@@ -66,7 +108,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
       initialTime: _selectedTimes[index] ?? TimeOfDay.now(),
     );
 
-    if (picked != null) {
+    if (mounted && picked != null) {
       setState(() {
         _selectedTimes[index] = picked;
       });
@@ -89,8 +131,9 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             // Medication Name
             TextField(
               controller: _medicationController,
+              readOnly: true,
               decoration: InputDecoration(
-                labelText: "Medication Name",
+                labelText: "Medication Name (Methadone only)",
                 labelStyle: TextStyles.font14Hint500Weight,
                 border: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.grey[400]!),
@@ -148,9 +191,6 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
               value: _frequency,
               items: [
                 'Once daily',
-                'Twice daily',
-                'Three times daily',
-                'Custom'
               ]
                   .map((freq) =>
                       DropdownMenuItem(value: freq, child: Text(freq)))
@@ -223,6 +263,15 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
               SizedBox(height: 20.h),
             ],
 
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Start Date'),
+              subtitle: Text(MedicationSchedule.dateLabel(_startDate)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: _pickStartDate,
+            ),
+            SizedBox(height: 12.h),
+
             // Number of Days
             TextField(
               controller: _daysController,
@@ -244,40 +293,16 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             ),
             SizedBox(height: 20.h),
 
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+              ),
             // Save Button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  final times = _selectedTimes
-                      .where((time) => time != null)
-                      .map((time) => time!.format(context))
-                      .toList();
-
-                  final originalMedication = widget.medication;
-
-                  final Medication updatedMedication;
-
-                  if (originalMedication == null) {
-                    updatedMedication = Medication(
-                      name: _medicationController.text.trim(),
-                      dose: _doseController.text.trim(),
-                      frequency: _frequency ?? '',
-                      numDays: int.tryParse(_daysController.text.trim()) ?? 0,
-                      times: times.join(', '),
-                    );
-                  } else {
-                    updatedMedication = originalMedication.copyWith(
-                      name: _medicationController.text.trim(),
-                      dose: _doseController.text.trim(),
-                      frequency: _frequency ?? '',
-                      numDays: int.tryParse(_daysController.text.trim()) ?? 0,
-                      times: times.join(', '),
-                    );
-                  }
-
-                  Navigator.pop(context, updatedMedication);
-                },
+                onPressed: _save,
                 child: Text(
                   widget.medication == null ? "Add Medication" : "Save Changes",
                 ),

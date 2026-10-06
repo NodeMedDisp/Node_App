@@ -20,6 +20,11 @@ class NodeBleFileTransferService {
     if (fileContents.trim().isEmpty) {
       throw StateError('The recovery-program file is empty.');
     }
+    final medicationBlocks = fileContents.split(RegExp(r'\r?\n'))
+        .where((line) => line.trimLeft().startsWith('Medication:')).length;
+    if (medicationBlocks > 1) {
+      throw StateError('Nothing sent: this legacy NODE transfer cannot safely send multiple medication blocks.');
+    }
 
     debugPrint(
       'NODE BLE: Discovering services on ${device.remoteId}',

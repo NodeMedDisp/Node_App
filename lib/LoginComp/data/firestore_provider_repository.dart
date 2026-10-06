@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/counseling_question.dart';
 import '../../models/medication.dart';
+import '../../models/medication_schedule.dart';
 import '../logic/provider/provider_user.dart';
 import 'provider_repository.dart';
 
@@ -301,22 +302,9 @@ class FirestoreProviderRepository implements ProviderRepository {
         startDate: DateTime.now().subtract(const Duration(days: 10)),
         latestEntryDate: DateTime.now(),
       ),
-      medications: const [
-        Medication(
-          name: 'Aspirin',
-          dose: '100mg',
-          times: '8:00 PM',
-          frequency: 'Daily',
-          numDays: 30,
-        ),
-        Medication(
-          name: 'Buprenorphine',
-          dose: '8mg',
-          times: '9:00 PM',
-          frequency: 'Daily',
-          numDays: 30,
-        ),
-      ],
+      // Do not seed overlapping medication events or invent a methadone dose.
+      // Existing demo patient records are still left untouched by _seedDemoPatient.
+      medications: const <Medication>[],
       prompts: const [
         CounselingQuestion(
           prompt: 'How stressed are you today?',
@@ -343,22 +331,7 @@ class FirestoreProviderRepository implements ProviderRepository {
         startDate: DateTime.now().subtract(const Duration(days: 5)),
         latestEntryDate: DateTime.now(),
       ),
-      medications: const [
-        Medication(
-          name: 'Naloxone',
-          dose: '4mg',
-          times: '10:00',
-          frequency: 'Daily',
-          numDays: 30,
-        ),
-        Medication(
-          name: 'Ibuprofen',
-          dose: '200mg',
-          times: '14:00',
-          frequency: 'Daily',
-          numDays: 30,
-        ),
-      ],
+      medications: const <Medication>[],
       prompts: const [
         CounselingQuestion(
           prompt: 'How is your pain level today?',
@@ -524,31 +497,98 @@ class FirestoreProviderRepository implements ProviderRepository {
     );
   }
 
+  int _medicationRevision(Map<String, dynamic>? data) {
+    final value = data?['medicationScheduleRevision'];
+    if (value == null) return 0;
+    if (value is int && value >= 0) return value;
+    throw StateError('The patient medication schedule revision is invalid.');
+  }
+
+  /// The query is outside the transaction because Flutter transactions read
+  /// document references, not collection queries. Reading the parent revision
+  /// BEFORE the server query, checking it IN the transaction, and incrementing
+  /// it with every medication write serializes writers using this repository.
+  /// Older app versions/admin writes do not participate in this client contract.
+  Future<void> _changeMedication({
+    required String clinicId,
+    required String patientId,
+    required String medicationId,
+    Medication? medication, // null means explicit deletion
+    bool creating = false,
+  }) async {
+    if (medication != null) MedicationSchedule.validateEntry(medication);
+    final patientReference = _patient(clinicId, patientId);
+    final medicationsReference = _medications(clinicId, patientId);
+    final reference = medicationsReference.doc(medicationId);
+
+    for (var attempt = 0; attempt < 5; attempt++) {
+      // Server reads deliberately fail offline rather than approve against an
+      // incomplete/stale local cache and queue a potentially conflicting dose.
+      final before = await patientReference.get(const GetOptions(source: Source.server));
+      if (!before.exists) throw StateError('The selected patient no longer exists.');
+      final revision = _medicationRevision(before.data());
+      final snapshot = await medicationsReference.get(const GetOptions(source: Source.server));
+      final existing = snapshot.docs.map((document) => Medication.fromJson(
+        document.data(), id: document.id,
+      )).toList();
+
+      final committed = await firestore.runTransaction<bool>((transaction) async {
+        final lockedPatient = await transaction.get(patientReference);
+        if (!lockedPatient.exists) throw StateError('The selected patient no longer exists.');
+        if (_medicationRevision(lockedPatient.data()) != revision) return false;
+
+        final targetExists = existing.any((entry) => entry.id == medicationId);
+        if (creating && targetExists) {
+          throw StateError('A new medication ID collided with an existing entry. Nothing saved.');
+        }
+        if (!creating && !targetExists) {
+          throw StateError('This medication was already removed. Refresh the program.');
+        }
+
+        if (medication != null) {
+          final patient = ProviderUser.fromFirestore(patientId, lockedPatient.data()!);
+          MedicationSchedule.validateCandidate(
+            medication,
+            existing.where((entry) => creating || entry.id != medicationId),
+            fallbackStartDate: patient.startDate,
+          );
+          final data = _programData(medication.toJson(), creating: creating);
+          if (creating) {
+            transaction.set(reference, data);
+          } else {
+            transaction.update(reference, data); // Never recreate a deleted record.
+          }
+        } else {
+          transaction.delete(reference);
+        }
+        transaction.update(patientReference, {
+          'medicationScheduleRevision': revision + 1,
+        });
+        return true;
+      });
+
+      if (committed) return;
+    }
+    throw const MedicationScheduleException(
+      'The medication program changed during saving. Review the refreshed program and try again.',
+    );
+  }
+
   @override
   Future<String> addMedication({
     required String clinicId,
     required String patientId,
     required Medication medication,
   }) async {
+    // Keep a unique document per entry; a drug name is NOT a document ID.
     final reference = _medications(clinicId, patientId).doc();
-
-    debugPrint(
-      'FIRESTORE: Adding medication '
-      'patient=$patientId '
-      'medication=${medication.name}',
+    await _changeMedication(
+      clinicId: clinicId,
+      patientId: patientId,
+      medicationId: reference.id,
+      medication: medication,
+      creating: true,
     );
-
-    final medicationToSave = medication.startDate == null
-        ? medication.copyWith(startDate: DateTime.now())
-        : medication;
-
-    await reference.set(
-      _programData(
-        medicationToSave.toJson(),
-        creating: true,
-      ),
-    );
-
     return reference.id;
   }
 
@@ -559,25 +599,15 @@ class FirestoreProviderRepository implements ProviderRepository {
     required Medication medication,
   }) async {
     final medicationId = medication.id;
-
     if (medicationId == null || medicationId.isEmpty) {
-      throw StateError(
-        'Cannot update a medication without a Firestore ID.',
-      );
+      throw StateError('Cannot update a medication without a Firestore ID.');
     }
-
-    debugPrint(
-      'FIRESTORE: Updating medication '
-      'patient=$patientId id=$medicationId',
+    await _changeMedication(
+      clinicId: clinicId,
+      patientId: patientId,
+      medicationId: medicationId,
+      medication: medication,
     );
-
-    await _medications(clinicId, patientId).doc(medicationId).set(
-          _programData(
-            medication.toJson(),
-            creating: false,
-          ),
-          SetOptions(merge: true),
-        );
   }
 
   @override
@@ -586,12 +616,11 @@ class FirestoreProviderRepository implements ProviderRepository {
     required String patientId,
     required String medicationId,
   }) async {
-    debugPrint(
-      'FIRESTORE: Deleting medication '
-      'patient=$patientId id=$medicationId',
+    await _changeMedication(
+      clinicId: clinicId,
+      patientId: patientId,
+      medicationId: medicationId,
     );
-
-    await _medications(clinicId, patientId).doc(medicationId).delete();
   }
 
   @override
@@ -688,6 +717,7 @@ class FirestoreProviderRepository implements ProviderRepository {
       );
     }
 
+    MedicationSchedule.validateProgram(medications);
     final patientReference = _patients(clinicId).doc();
 
     final patient = ProviderUser(

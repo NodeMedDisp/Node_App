@@ -1,0 +1,27 @@
+{
+  "repository": "NodeMedDisp/Node_App",
+  "branch": "jv_working",
+  "base_commit": "9e877a10436e65aec340622f6bff610e9e0faca1",
+  "modified_files": [
+    "lib/models/medication.dart",
+    "lib/GetStarted/enter_medication_data.dart",
+    "lib/LoginComp/core/widgets/MedicationEntryPage.dart",
+    "lib/LoginComp/data/firestore_provider_repository.dart",
+    "lib/GetStarted/provider_program_editor_screen.dart",
+    "lib/HomePage/calendar_widg.dart",
+    "lib/GetStarted/provider_main_screen.dart",
+    "lib/Bluetooth/recovery_program_file_formatter.dart",
+    "lib/Bluetooth/node_ble_file_transfer_service.dart",
+    "lib/GetStarted/summary_screen.dart",
+    "lib/GetStarted/get_started.dart",
+    "lib/HomePage/home_page.dart"
+  ],
+  "new_files": [
+    "lib/models/medication_schedule.dart",
+    "lib/HomePage/recovery_cache_codec.dart",
+    "tool/check_daily_medication_schedule.dart"
+  ],
+  "patch_sha256": "88584da08ed083e92f64b9f8740f7b1b5e5a9ef260af800dbc3ae5429d2ecc9c",
+  "device_firmware_changed": false,
+  "prior_prompt_link_patch_required": false
+}
