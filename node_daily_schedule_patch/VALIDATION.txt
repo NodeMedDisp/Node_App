@@ -1,8 +1,0 @@
-PASS: baseline-excerpts: forward check, exact replacement, whitespace check, reverse check and restore.
-PASS: shifted-excerpts: forward check, exact replacement, whitespace check, reverse check and restore.
-PASS: compressed-excerpts: forward check, exact replacement, whitespace check, reverse check and restore.
-PASS: full original provider_program_editor_screen.dart has Git blob bf3462f8344fa1d911dce290aa634fb0f469d76e and matches both editor replacement blocks.
-PASS: all modified hunks have unchanged context on both ends; no fixture filler is included in the delivered patch.
-NOT RUN: Dart regression tests (Dart is not installed in this environment).
-NOT RUN: Flutter analyze, Flutter build, widget tests, Firebase emulator/live writes, Android lifecycle, or device hardware tests.
-LIMITATION: other application checks used source-excerpt fixtures, not a complete Node_App checkout. APPLY.ps1 checks the pinned commit and the COMPLETE local checkout with git apply --check before applying.

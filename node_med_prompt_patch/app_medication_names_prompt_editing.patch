@@ -1,0 +1,1670 @@
+diff --git a/lib/Bluetooth/recovery_program_file_formatter.dart b/lib/Bluetooth/recovery_program_file_formatter.dart
+index 144cd0e..fad3a87 100644
+--- a/lib/Bluetooth/recovery_program_file_formatter.dart
++++ b/lib/Bluetooth/recovery_program_file_formatter.dart
+@@ -1,6 +1,7 @@
+ import '../models/counseling_question.dart';
+ import '../../../../Users/JonathonVizmeg/Downloads/node_med_prompt_patch/models/medication.dart';
+ import '../../../../Users/JonathonVizmeg/Downloads/node_med_prompt_patch/models/medication_schedule.dart';
++import '../../../../Users/JonathonVizmeg/Downloads/node_med_prompt_patch/models/prompt_schedule.dart';
+ 
+ /// Generates the exact configuration-file format understood by NODE.
+ ///
+@@ -23,8 +24,16 @@ class RecoveryProgramFileFormatter {
+       now: timestamp,
+       fallbackStartDate: fallbackStartDate,
+     );
+-    if (medications.isNotEmpty && transferMedications.isEmpty && prompts.isEmpty) {
+-      throw const MedicationScheduleException('Nothing sent. There is no active medication today.');
++    final transferPrompts = PromptSchedule.forLegacyTransfer(
++      prompts,
++      now: timestamp,
++      fallbackStartDate: fallbackStartDate,
++    );
++    if (transferMedications.isEmpty && transferPrompts.isEmpty) {
++      throw const MedicationScheduleException(
++        'Nothing sent. There is no active medication or prompt today. '
++        'Future entries remain saved in the app.',
++      );
+     }
+     final buffer = StringBuffer();
+ 
+@@ -59,7 +68,7 @@ class RecoveryProgramFileFormatter {
+       buffer.writeln();
+     }
+ 
+-    for (final prompt in prompts) {
++    for (final prompt in transferPrompts) {
+       buffer.writeln('Prompt: ${prompt.prompt}');
+       buffer.writeln('Required Response: ${prompt.resReq}');
+       buffer.writeln('Options: ${prompt.options.join(', ')}');
+diff --git a/lib/GetStarted/enter_counseling_data.dart b/lib/GetStarted/enter_counseling_data.dart
+index cb84fea..0929fdc 100644
+--- a/lib/GetStarted/enter_counseling_data.dart
++++ b/lib/GetStarted/enter_counseling_data.dart
+@@ -9,13 +9,25 @@ import '/../../LoginComp/theming/colors.dart';
+ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+ import '../models/medication.dart';
+ import '../models/counseling_question.dart';
++import '../models/medication_schedule.dart';
++import '../models/prompt_schedule.dart';
+ 
+ class EnterCounselingPrompts extends StatefulWidget {
+   final List<Medication> medications;
+   final BluetoothDevice? device;
+-
+-  const EnterCounselingPrompts(
+-      {super.key, required this.medications, this.device});
++  final CounselingQuestion? initialPrompt;
++  final DateTime? fallbackStartDate;
++  // Used when editing a local draft: return a value, never write to Firestore.
++  final bool returnResultOnly;
++
++  const EnterCounselingPrompts({
++    super.key,
++    required this.medications,
++    this.device,
++    this.initialPrompt,
++    this.fallbackStartDate,
++    this.returnResultOnly = false,
++  });
+ 
+   @override
+   _EnterCounselingPrompts createState() => _EnterCounselingPrompts();
+@@ -46,8 +58,109 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+   String? _responseType;
+   List<CounselingQuestion> prompts = [];
+   String? _errorMessage;
++  late DateTime _startDate;
++  ProviderCubit? _providerCubit;
++  String? _patientAtOpen;
++  bool _saving = false;
++  bool _responseChanged = false;
++  bool _streakThresholdChanged = false;
++  bool _tokenThresholdChanged = false;
++
++  bool get _editing => widget.initialPrompt != null;
++
++  @override
++  void initState() {
++    super.initState();
++    if (!widget.returnResultOnly) {
++      try {
++        _providerCubit = context.read<ProviderCubit>();
++        _patientAtOpen = _providerCubit?.state.selectedUser?.id;
++      } catch (_) {
++        // Standalone setup does not have a provider cubit.
++      }
++    }
++    final original = widget.initialPrompt;
++    _startDate = DateUtils.dateOnly(original == null
++        ? (widget.fallbackStartDate ?? DateTime.now())
++        : (original.startDate ?? widget.fallbackStartDate ??
++            _providerCubit?.state.selectedUser?.startDate ?? DateTime.now()));
++    if (original == null) return;
++
++    _promptController.text = original.prompt;
++    _daysController.text = original.numberOfDays.toString();
++    _streakEnabled = original.streakEnabled;
++    _streakTitleController.text = original.streakTitle;
++    _tokenEnabled = original.tokenEnabled;
++    _tokenTitleController.text = original.tokenTitle;
++    _tokenQuantityController.text = original.tokenQuantity > 0
++        ? original.tokenQuantity.toString() : '1';
++
++    final responseRequirement = original.resReq.trim().toLowerCase();
++    final options = original.options.map((v) => v.trim().toLowerCase()).join(',');
++    if (responseRequirement == 'yes_no' ||
++        (responseRequirement == 'yes' && options == 'yes,no')) {
++      _responseRequired = 'Yes';
++      _responseType = 'Yes/No';
++    } else if (responseRequirement == 'number' ||
++        (responseRequirement == 'yes' && options == '1,2,3,4,5,6,7,8,9,10')) {
++      _responseRequired = 'Yes';
++      _responseType = '1-10 Scale';
++    } else if (responseRequirement == 'journal response') {
++      _responseRequired = 'Journal Response';
++    } else {
++      // Preserve legacy/custom response options unless explicitly changed.
++      _responseRequired = 'Keep existing response';
++    }
++    _loadThreshold(original.streakThreshold, streak: true);
++    _loadThreshold(original.tokenThreshold, streak: false);
++  }
++
++  void _loadThreshold(String value, {required bool streak}) {
++    final match = RegExp(r'^(<=|>=|<|>|=)?\s*(\d+)$').firstMatch(value.trim());
++    final operator = match?.group(1) ?? '=';
++    final number = match?.group(2) ?? '';
++    final yesNo = value.trim().replaceFirst(RegExp(r'^=\s*'), '').toLowerCase();
++    if (streak) {
++      _streakOperator = operator;
++      _streakThresholdController.text = number;
++      _streakYesNoThreshold = yesNo == 'no' ? 'No' : 'Yes';
++    } else {
++      _tokenOperator = operator;
++      _tokenThresholdController.text = number;
++      _tokenYesNoThreshold = yesNo == 'no' ? 'No' : 'Yes';
++    }
++  }
++
++  Future<void> _pickStartDate() async {
++    final picked = await showDatePicker(
++      context: context,
++      initialDate: _startDate,
++      firstDate: DateTime(_startDate.year < 2000 ? _startDate.year : 2000),
++      lastDate: DateTime(_startDate.year > 2100 ? _startDate.year : 2100, 12, 31),
++    );
++    if (!mounted || picked == null) return;
++    setState(() => _startDate = DateUtils.dateOnly(picked));
++  }
++
++  Future<void> _editDraft(int index) async {
++    final original = prompts[index];
++    final updated = await Navigator.push<CounselingQuestion>(
++      context,
++      MaterialPageRoute(builder: (_) => EnterCounselingPrompts(
++        medications: widget.medications,
++        device: widget.device,
++        initialPrompt: original,
++        fallbackStartDate: _startDate,
++        returnResultOnly: true,
++      )),
++    );
++    if (!mounted || updated == null) return;
++    final currentIndex = prompts.indexOf(original);
++    if (currentIndex >= 0) setState(() => prompts[currentIndex] = updated);
++  }
+ 
+   Future<void> _addPrompt() async {
++    if (_saving) return;
+     final promptText = _promptController.text.trim();
+     final numberOfDays = int.tryParse(_daysController.text.trim());
+ 
+@@ -110,7 +223,9 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+ 
+     final List<String> options;
+ 
+-    if (_responseRequired == 'Yes' && _responseType == 'Yes/No') {
++    if (_responseRequired == 'Keep existing response') {
++      options = List<String>.of(widget.initialPrompt!.options);
++    } else if (_responseRequired == 'Yes' && _responseType == 'Yes/No') {
+       options = ['Yes', 'No'];
+     } else if (_responseRequired == 'Yes' && _responseType == '1-10 Scale') {
+       options = List.generate(
+@@ -133,39 +248,63 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+       yesNoThreshold: _tokenYesNoThreshold,
+     );
+ 
++    final original = widget.initialPrompt;
++    final keepResponse = original != null &&
++        (!_responseChanged || _responseRequired == 'Keep existing response');
+     final newPrompt = CounselingQuestion(
++      id: original?.id,
+       prompt: promptText,
+-      resReq: _responseRequired,
+-      options: options,
++      resReq: keepResponse ? original!.resReq : _responseRequired,
++      options: keepResponse ? List<String>.of(original!.options) : options,
+       numberOfDays: numberOfDays,
++      startDate: _startDate,
+       streakEnabled: _streakEnabled,
+-      streakTitle: _streakEnabled ? _streakTitleController.text.trim() : '',
+-      streakThreshold: _streakEnabled ? streakThreshold : 'None',
++      streakTitle: _streakTitleController.text.trim(),
++      streakThreshold: _streakEnabled
++          ? (keepResponse && !_streakThresholdChanged && original!.streakEnabled
++              ? original!.streakThreshold : streakThreshold)
++          : (original?.streakThreshold ?? 'None'),
+       tokenEnabled: _tokenEnabled,
+-      tokenTitle: _tokenEnabled ? _tokenTitleController.text.trim() : '',
+-      tokenThreshold: _tokenEnabled ? tokenThreshold : 'None',
++      tokenTitle: _tokenTitleController.text.trim(),
++      tokenThreshold: _tokenEnabled
++          ? (keepResponse && !_tokenThresholdChanged && original!.tokenEnabled
++              ? original!.tokenThreshold : tokenThreshold)
++          : (original?.tokenThreshold ?? 'None'),
+       tokenQuantity:
+-          _tokenEnabled ? int.parse(_tokenQuantityController.text.trim()) : 0,
++          _tokenEnabled ? int.parse(_tokenQuantityController.text.trim())
++              : (original?.tokenQuantity ?? 0),
+     );
+ 
+-    ProviderCubit? providerCubit;
+-
+     try {
+-      providerCubit = context.read<ProviderCubit>();
+-    } catch (_) {
+-      providerCubit = null;
++      PromptSchedule.validateEntry(newPrompt);
++    } on MedicationScheduleException catch (error) {
++      setState(() => _errorMessage = error.message);
++      return;
+     }
+-
++    if (widget.returnResultOnly) {
++      Navigator.pop(context, newPrompt);
++      return;
++    }
++    final providerCubit = _providerCubit;
+     if (providerCubit != null) {
++      if (_patientAtOpen == null ||
++          providerCubit.state.selectedUser?.id != _patientAtOpen) {
++        setState(() => _errorMessage =
++            'The selected patient changed. Close this form and open it again.');
++        return;
++      }
++      setState(() => _saving = true);
+       try {
+         debugPrint(
+           'PROVIDER PROMPT FORM: '
+           'Saving "${newPrompt.prompt}"',
+         );
+ 
+-        await providerCubit.addPromptToSelectedUser(
+-          newPrompt,
+-        );
++        if (_editing) {
++          await providerCubit.updatePromptForSelectedUser(newPrompt);
++        } else {
++          await providerCubit.addPromptToSelectedUser(newPrompt);
++        }
+ 
+         debugPrint(
+           'PROVIDER PROMPT FORM: Save completed',
+@@ -189,16 +328,25 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+         setState(() {
+           _errorMessage = 'Could not save prompt: $error';
+         });
++      } finally {
++        if (mounted) setState(() => _saving = false);
+       }
+ 
+       return;
+     }
++    if (_editing) {
++      Navigator.pop(context, newPrompt);
++      return;
++    }
+ 
+     setState(() {
+       prompts.add(newPrompt);
+ 
+       _promptController.clear();
+       _daysController.clear();
++      _responseChanged = false;
++      _streakThresholdChanged = false;
++      _tokenThresholdChanged = false;
+ 
+       _responseRequired = 'Require a Response?';
+       _responseType = null;
+@@ -246,6 +394,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+     required String yesNoThreshold,
+     required ValueChanged<String?> onYesNoChanged,
+     TextEditingController? quantityController,
++    required VoidCallback onThresholdChanged,
+   }) {
+     final isToken = quantityController != null;
+ 
+@@ -307,6 +456,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+                     Expanded(
+                       child: TextField(
+                         controller: numericThresholdController,
++                        onChanged: (_) => onThresholdChanged(),
+                         keyboardType: TextInputType.number,
+                         inputFormatters: [
+                           FilteringTextInputFormatter.digitsOnly,
+@@ -349,6 +499,8 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+                     'None — reward when the journal response is submitted',
+                   ),
+                 )
++              else if (_responseRequired == 'Keep existing response')
++                const Text('The existing response options and thresholds are retained.')
+               else
+                 const Text(
+                   'Select the required response and response type above.',
+@@ -432,242 +584,281 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
+ 
+   @override
+   Widget build(BuildContext context) {
+-    bool isProvider = false;
+-    try {
+-      isProvider = context.read<ProviderCubit>().state.selectedUser != null;
+-    } catch (_) {}
++    final isProvider = _providerCubit != null;
+ 
+     return Scaffold(
+-      appBar: AppBar(title: const Text("Enter Counseling Prompts")),
++      appBar: AppBar(title: Text(_editing ? 'Edit Counseling Prompt' : 'Enter Counseling Prompts')),
+       resizeToAvoidBottomInset: true,
+-      body: SafeArea(
+-        child: SingleChildScrollView(
+-          padding: const EdgeInsets.all(16.0),
+-          child: Column(
+-            children: [
+-              TextField(
+-                controller: _promptController,
+-                decoration: InputDecoration(
+-                  labelText: "Enter Prompt Here",
+-                  labelStyle: TextStyles.font14Hint500Weight,
+-                  border: OutlineInputBorder(
+-                      borderSide: BorderSide(color: Colors.grey[400]!)),
+-                  enabledBorder: const OutlineInputBorder(
+-                    borderSide: BorderSide(color: Colors.black, width: 1.5),
+-                  ),
+-                  focusedBorder: const OutlineInputBorder(
+-                    borderSide:
+-                        BorderSide(color: ColorsManager.mainBlue, width: 2.0),
++      body: AbsorbPointer(
++        absorbing: _saving,
++        child: SafeArea(
++          child: SingleChildScrollView(
++            padding: const EdgeInsets.all(16.0),
++            child: Column(
++              children: [
++                TextField(
++                  key: const ValueKey('prompt-text'),
++                  controller: _promptController,
++                  decoration: InputDecoration(
++                    labelText: "Enter Prompt Here",
++                    labelStyle: TextStyles.font14Hint500Weight,
++                    border: OutlineInputBorder(
++                        borderSide: BorderSide(color: Colors.grey[400]!)),
++                    enabledBorder: const OutlineInputBorder(
++                      borderSide: BorderSide(color: Colors.black, width: 1.5),
++                    ),
++                    focusedBorder: const OutlineInputBorder(
++                      borderSide:
++                          BorderSide(color: ColorsManager.mainBlue, width: 2.0),
++                    ),
+                   ),
+                 ),
+-              ),
+-              SizedBox(height: 10.h),
+-              Row(
+-                children: [
+-                  Expanded(
+-                    child: DropdownButtonFormField<String>(
+-                      value: _responseRequired,
+-                      items: ['Require a Response?', 'Yes', 'Journal Response']
+-                          .map((resReq) {
+-                        return DropdownMenuItem<String>(
+-                            value: resReq, child: Text(resReq));
+-                      }).toList(),
+-                      onChanged: (value) {
+-                        if (value == null) {
+-                          return;
+-                        }
+-
+-                        setState(() {
+-                          _responseRequired = value;
+-
+-                          if (_responseRequired != 'Yes') {
+-                            _responseType = null;
++                SizedBox(height: 10.h),
++                Row(
++                  children: [
++                    Expanded(
++                      child: DropdownButtonFormField<String>(
++                        value: _responseRequired,
++                        items: [
++                          'Require a Response?', 'Yes', 'Journal Response',
++                          if (_editing) 'Keep existing response',
++                        ]
++                            .map((resReq) {
++                          return DropdownMenuItem<String>(
++                              value: resReq, child: Text(resReq));
++                        }).toList(),
++                        onChanged: (value) {
++                          if (value == null) {
++                            return;
+                           }
+ 
+-                          _errorMessage = null;
+-                        });
+-                      },
+-                      decoration: InputDecoration(
+-                        border: OutlineInputBorder(
+-                            borderSide: BorderSide(color: Colors.grey[400]!)),
+-                        enabledBorder: const OutlineInputBorder(
+-                          borderSide:
+-                              BorderSide(color: Colors.black, width: 1.5),
+-                        ),
+-                        focusedBorder: const OutlineInputBorder(
+-                          borderSide: BorderSide(
+-                              color: ColorsManager.mainBlue, width: 2.0),
++                          setState(() {
++                            _responseRequired = value;
++                            _responseChanged = true;
++
++                            if (_responseRequired != 'Yes') {
++                              _responseType = null;
++                            }
++
++                            _errorMessage = null;
++                          });
++                        },
++                        decoration: InputDecoration(
++                          border: OutlineInputBorder(
++                              borderSide: BorderSide(color: Colors.grey[400]!)),
++                          enabledBorder: const OutlineInputBorder(
++                            borderSide:
++                                BorderSide(color: Colors.black, width: 1.5),
++                          ),
++                          focusedBorder: const OutlineInputBorder(
++                            borderSide: BorderSide(
++                                color: ColorsManager.mainBlue, width: 2.0),
++                          ),
+                         ),
+                       ),
+                     ),
++                  ],
++                ),
++                SizedBox(height: 10.h),
++                if (_responseRequired == 'Yes') ...[
++                  const Text(
++                    "Select Response Type:",
++                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
++                  ),
++                  RadioListTile<String>(
++                    title: const Text('Yes/No'),
++                    value: 'Yes/No',
++                    groupValue: _responseType,
++                    onChanged: (value) {
++                      setState(() {
++                        _responseType = value;
++                        _responseChanged = true;
++                        _errorMessage = null;
++                      });
++                    },
++                  ),
++                  RadioListTile<String>(
++                    title: const Text('1-10 Scale'),
++                    value: '1-10 Scale',
++                    groupValue: _responseType,
++                    onChanged: (value) {
++                      setState(() {
++                        _responseType = value;
++                        _responseChanged = true;
++                        _errorMessage = null;
++                      });
++                    },
+                   ),
+                 ],
+-              ),
+-              SizedBox(height: 10.h),
+-              if (_responseRequired == 'Yes') ...[
+-                const Text(
+-                  "Select Response Type:",
+-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
++                if (_errorMessage != null)
++                  Padding(
++                    padding: const EdgeInsets.only(top: 8.0),
++                    child: Text(
++                      _errorMessage!,
++                      style: TextStyle(color: Colors.red, fontSize: 12.sp),
++                    ),
++                  ),
++                SizedBox(height: 10.h),
++                ListTile(
++                  contentPadding: EdgeInsets.zero,
++                  key: const ValueKey('prompt-start'),
++                  title: const Text('Start Date'),
++                  subtitle: Text(MedicationSchedule.dateLabel(_startDate)),
++                  trailing: const Icon(Icons.calendar_today),
++                  onTap: _saving ? null : _pickStartDate,
++                ),
++                TextField(
++                  key: const ValueKey('prompt-days'),
++                  controller: _daysController,
++                  onChanged: (_) => setState(() {}),
++                  keyboardType: TextInputType.number,
++                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
++                  decoration: InputDecoration(
++                    labelText: "Number of Days",
++                    helperText: PromptSchedule.dateRangeLabel(
++                      _startDate, int.tryParse(_daysController.text.trim())),
++                    helperMaxLines: 2,
++                    labelStyle: TextStyles.font14Hint500Weight,
++                    border: OutlineInputBorder(
++                        borderSide: BorderSide(color: Colors.grey[400]!)),
++                    enabledBorder: const OutlineInputBorder(
++                      borderSide: BorderSide(color: Colors.black, width: 1.5),
++                    ),
++                    focusedBorder: const OutlineInputBorder(
++                      borderSide:
++                          BorderSide(color: ColorsManager.mainBlue, width: 2.0),
++                    ),
++                  ),
+                 ),
+-                RadioListTile<String>(
+-                  title: const Text('Yes/No'),
+-                  value: 'Yes/No',
+-                  groupValue: _responseType,
+-                  onChanged: (value) {
++                SizedBox(height: 20.h),
++                _buildPromptRewardSection(
++                  rewardName: 'streak',
++                  onThresholdChanged: () => _streakThresholdChanged = true,
++                  enabled: _streakEnabled,
++                  onEnabledChanged: (value) {
+                     setState(() {
+-                      _responseType = value;
+-                      _errorMessage = null;
++                      _streakEnabled = value;
+                     });
+                   },
+-                ),
+-                RadioListTile<String>(
+-                  title: const Text('1-10 Scale'),
+-                  value: '1-10 Scale',
+-                  groupValue: _responseType,
+-                  onChanged: (value) {
++                  titleController: _streakTitleController,
++                  operatorValue: _streakOperator,
++                  onOperatorChanged: (value) {
++                    if (value == null) {
++                      return;
++                    }
++
++                    setState(() {
++                      _streakOperator = value;
++                      _streakThresholdChanged = true;
++                    });
++                  },
++                  numericThresholdController: _streakThresholdController,
++                  yesNoThreshold: _streakYesNoThreshold,
++                  onYesNoChanged: (value) {
++                    if (value == null) {
++                      return;
++                    }
++
+                     setState(() {
+-                      _responseType = value;
+-                      _errorMessage = null;
++                      _streakYesNoThreshold = value;
++                      _streakThresholdChanged = true;
+                     });
+                   },
+                 ),
+-              ],
+-              if (_errorMessage != null)
+-                Padding(
+-                  padding: const EdgeInsets.only(top: 8.0),
+-                  child: Text(
+-                    _errorMessage!,
+-                    style: TextStyle(color: Colors.red, fontSize: 12.sp),
+-                  ),
++                _buildPromptRewardSection(
++                  rewardName: 'token reward',
++                  onThresholdChanged: () => _tokenThresholdChanged = true,
++                  enabled: _tokenEnabled,
++                  onEnabledChanged: (value) {
++                    setState(() {
++                      _tokenEnabled = value;
++                    });
++                  },
++                  titleController: _tokenTitleController,
++                  operatorValue: _tokenOperator,
++                  onOperatorChanged: (value) {
++                    if (value == null) {
++                      return;
++                    }
++
++                    setState(() {
++                      _tokenOperator = value;
++                      _tokenThresholdChanged = true;
++                    });
++                  },
++                  numericThresholdController: _tokenThresholdController,
++                  yesNoThreshold: _tokenYesNoThreshold,
++                  onYesNoChanged: (value) {
++                    if (value == null) {
++                      return;
++                    }
++
++                    setState(() {
++                      _tokenYesNoThreshold = value;
++                      _tokenThresholdChanged = true;
++                    });
++                  },
++                  quantityController: _tokenQuantityController,
+                 ),
+-              SizedBox(height: 10.h),
+-              TextField(
+-                controller: _daysController,
+-                keyboardType: TextInputType.number,
+-                decoration: InputDecoration(
+-                  labelText: "Number of Days",
+-                  labelStyle: TextStyles.font14Hint500Weight,
+-                  border: OutlineInputBorder(
+-                      borderSide: BorderSide(color: Colors.grey[400]!)),
+-                  enabledBorder: const OutlineInputBorder(
+-                    borderSide: BorderSide(color: Colors.black, width: 1.5),
+-                  ),
+-                  focusedBorder: const OutlineInputBorder(
+-                    borderSide:
+-                        BorderSide(color: ColorsManager.mainBlue, width: 2.0),
++                SizedBox(height: 20.h),
++                SizedBox(
++                  width: double.infinity,
++                  child: ElevatedButton(
++                    key: const ValueKey('prompt-save'),
++                    onPressed: _saving ? null : _addPrompt,
++                    style: ElevatedButton.styleFrom(
++                      padding: EdgeInsets.symmetric(vertical: 15.h),
++                      backgroundColor: ColorsManager.mainBlue,
++                    ),
++                    child: Text(
++                      _saving ? 'Saving...' : _editing ? 'Save Changes'
++                          : isProvider ? 'Save Prompt' : 'Add Prompt',
++                      style: TextStyles.font14Hint500Weight
++                          .copyWith(color: Colors.white),
++                    ),
+                   ),
+                 ),
+-              ),
+-              SizedBox(height: 20.h),
+-              _buildPromptRewardSection(
+-                rewardName: 'streak',
+-                enabled: _streakEnabled,
+-                onEnabledChanged: (value) {
+-                  setState(() {
+-                    _streakEnabled = value;
+-                  });
+-                },
+-                titleController: _streakTitleController,
+-                operatorValue: _streakOperator,
+-                onOperatorChanged: (value) {
+-                  if (value == null) {
+-                    return;
+-                  }
+-
+-                  setState(() {
+-                    _streakOperator = value;
+-                  });
+-                },
+-                numericThresholdController: _streakThresholdController,
+-                yesNoThreshold: _streakYesNoThreshold,
+-                onYesNoChanged: (value) {
+-                  if (value == null) {
+-                    return;
+-                  }
+-
+-                  setState(() {
+-                    _streakYesNoThreshold = value;
+-                  });
+-                },
+-              ),
+-              _buildPromptRewardSection(
+-                rewardName: 'token reward',
+-                enabled: _tokenEnabled,
+-                onEnabledChanged: (value) {
+-                  setState(() {
+-                    _tokenEnabled = value;
+-                  });
+-                },
+-                titleController: _tokenTitleController,
+-                operatorValue: _tokenOperator,
+-                onOperatorChanged: (value) {
+-                  if (value == null) {
+-                    return;
+-                  }
+-
+-                  setState(() {
+-                    _tokenOperator = value;
+-                  });
+-                },
+-                numericThresholdController: _tokenThresholdController,
+-                yesNoThreshold: _tokenYesNoThreshold,
+-                onYesNoChanged: (value) {
+-                  if (value == null) {
+-                    return;
+-                  }
+-
+-                  setState(() {
+-                    _tokenYesNoThreshold = value;
+-                  });
+-                },
+-                quantityController: _tokenQuantityController,
+-              ),
+-              SizedBox(height: 20.h),
+-              SizedBox(
+-                width: double.infinity,
+-                child: ElevatedButton(
+-                  onPressed: _addPrompt,
+-                  style: ElevatedButton.styleFrom(
+-                    padding: EdgeInsets.symmetric(vertical: 15.h),
+-                    backgroundColor: ColorsManager.mainBlue,
+-                  ),
++                const Padding(
++                  padding: EdgeInsets.symmetric(vertical: 12),
+                   child: Text(
+-                    isProvider ? "Save Prompt" : "Add Prompt",
+-                    style: TextStyles.font14Hint500Weight
+-                        .copyWith(color: Colors.white),
++                    'Dates are saved in the app. Bluetooth sends only prompts active '
++                    'today, with their remaining days. Reprogram NODE when a future '
++                    'prompt starts; editing the app does not update an offline device.',
+                   ),
+                 ),
+-              ),
+-              if (!isProvider) ...[
+-                SizedBox(height: 20.h),
+-                SizedBox(
+-                  height: 200.h,
+-                  child: ListView.builder(
+-                    itemCount: prompts.length,
+-                    itemBuilder: (context, index) {
+-                      final prompt = prompts[index];
+-                      return ListTile(
+-                        title: Text(
+-                            "${prompt.prompt} (${prompt.numberOfDays} day(s))"),
+-                        subtitle: Text("Response: ${prompt.resReq}"),
+-                        trailing: IconButton(
+-                          icon: const Icon(Icons.delete, color: Colors.grey),
+-                          onPressed: () {
+-                            setState(() {
+-                              prompts.removeAt(index);
+-                            });
+-                          },
+-                        ),
+-                      );
+-                    },
++                if (!isProvider && !_editing && !widget.returnResultOnly) ...[
++                  SizedBox(height: 20.h),
++                  SizedBox(
++                    height: 200.h,
++                    child: ListView.builder(
++                      itemCount: prompts.length,
++                      itemBuilder: (context, index) {
++                        final prompt = prompts[index];
++                        return ListTile(
++                          title: Text(
++                              "${prompt.prompt} (${prompt.numberOfDays} day(s))"),
++                          subtitle: Text(PromptSchedule.rangeLabel(prompt)),
++                          leading: const Icon(Icons.edit),
++                          onTap: () => _editDraft(index),
++                          trailing: IconButton(
++                            icon: const Icon(Icons.delete, color: Colors.grey),
++                            onPressed: () {
++                              setState(() {
++                                prompts.removeAt(index);
++                              });
++                            },
++                          ),
++                        );
++                      },
++                    ),
+                   ),
+-                ),
++                ],
+               ],
+-            ],
++            ),
+           ),
+         ),
+-      ),
+-      bottomNavigationBar: isProvider
++      ), // AbsorbPointer
++      bottomNavigationBar: isProvider || _editing || widget.returnResultOnly
+           ? null
+           : Padding(
+               padding: const EdgeInsets.all(16.0),
+diff --git a/lib/GetStarted/enter_medication_data.dart b/lib/GetStarted/enter_medication_data.dart
+index b0d8cca..dbad423 100644
+--- a/lib/GetStarted/enter_medication_data.dart
++++ b/lib/GetStarted/enter_medication_data.dart
+@@ -29,7 +29,7 @@ class EnterPrescriptionData extends StatefulWidget {
+ 
+ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
+   final TextEditingController _medicationController =
+-      TextEditingController(text: 'Methadone');
++      TextEditingController();
+   final TextEditingController _doseController = TextEditingController();
+   final TextEditingController _daysController = TextEditingController();
+   final TextEditingController _streakTitleController = TextEditingController();
+@@ -214,7 +214,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
+     setState(() {
+       medications.add(newMed);
+ 
+-      _medicationController.text = 'Methadone';
++      _medicationController.clear();
+       _doseController.clear();
+       _daysController.clear();
+ 
+@@ -348,9 +348,10 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
+             children: [
+               TextField(
+                 controller: _medicationController,
+-                readOnly: true,
++                textCapitalization: TextCapitalization.words,
+                 decoration: InputDecoration(
+-                  labelText: "Medication Name (Methadone only)",
++                  labelText: "Medication Name / Type",
++                  helperText: "Any name. Only one medication event per day.",
+                   labelStyle: TextStyles.font14Hint500Weight,
+                   border: const OutlineInputBorder(
+                     borderSide: BorderSide(color: Colors.black, width: 1.5),
+@@ -367,9 +368,10 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
+               SizedBox(height: 20.h),
+               TextField(
+                 controller: _doseController,
+-                keyboardType: TextInputType.number,
++                keyboardType: TextInputType.text,
+                 decoration: InputDecoration(
+-                  labelText: "Number of Milligrams Per Dose",
++                  labelText: "Dose (include unit)",
++                  helperText: "Enter the prescribed value and unit; no conversion is performed.",
+                   labelStyle: TextStyles.font14Hint500Weight,
+                   border: const OutlineInputBorder(
+                     borderSide: BorderSide(color: Colors.black, width: 1.5),
+diff --git a/lib/GetStarted/provider_program_editor_screen.dart b/lib/GetStarted/provider_program_editor_screen.dart
+index 19032d2..2098885 100644
+--- a/lib/GetStarted/provider_program_editor_screen.dart
++++ b/lib/GetStarted/provider_program_editor_screen.dart
+@@ -6,6 +6,8 @@ import '../LoginComp/logic/provider/provider_cubit.dart';
+ import '../LoginComp/logic/provider/provider_state.dart';
+ import '../models/medication.dart';
+ import '../models/medication_schedule.dart';
++import '../models/counseling_question.dart';
++import '../models/prompt_schedule.dart';
+ import 'enter_counseling_data.dart';
+ import 'enter_medication_data.dart';
+ 
+@@ -181,14 +183,29 @@ class _MedicationList extends StatelessWidget {
+ class _PromptList extends StatelessWidget {
+   final ProviderState state;
+ 
+-  const _PromptList({
+-    required this.state,
+-  });
++  const _PromptList({required this.state});
++
++  void _openForm(BuildContext context, [CounselingQuestion? prompt]) {
++    final cubit = context.read<ProviderCubit>();
++    Navigator.push(
++      context,
++      MaterialPageRoute(
++        builder: (_) => BlocProvider.value(
++          value: cubit,
++          child: EnterCounselingPrompts(
++            medications: state.selectedMedications,
++            initialPrompt: prompt,
++            // Existing legacy records use the patient's start, not today's date.
++            fallbackStartDate: prompt == null ? null : state.selectedUser?.startDate,
++          ),
++        ),
++      ),
++    );
++  }
+ 
+   @override
+   Widget build(BuildContext context) {
+     final cubit = context.read<ProviderCubit>();
+-
+     return Column(
+       children: [
+         Padding(
+@@ -198,52 +215,50 @@ class _PromptList extends StatelessWidget {
+             child: ElevatedButton.icon(
+               icon: const Icon(Icons.add),
+               label: const Text('Add Counseling Question'),
+-              onPressed: () {
+-                Navigator.push(
+-                  context,
+-                  MaterialPageRoute(
+-                    builder: (_) => BlocProvider.value(
+-                      value: cubit,
+-                      child: EnterCounselingPrompts(
+-                        medications: state.selectedMedications,
+-                      ),
+-                    ),
+-                  ),
+-                );
+-              },
++              onPressed: state.saving ? null : () => _openForm(context),
+             ),
+           ),
+         ),
+         Expanded(
+           child: state.selectedPrompts.isEmpty
+-              ? const Center(
+-                  child: Text(
+-                    'No counseling questions are configured.',
+-                  ),
+-                )
++              ? const Center(child: Text('No counseling questions are configured.'))
+               : ListView.separated(
+                   itemCount: state.selectedPrompts.length,
+                   separatorBuilder: (_, __) => const Divider(height: 1),
+                   itemBuilder: (context, index) {
+                     final prompt = state.selectedPrompts[index];
+-
++                    final canEdit = prompt.id != null && !state.saving;
+                     return ListTile(
++                      key: prompt.id == null ? null : ValueKey('prompt-${prompt.id}'),
+                       title: Text(prompt.prompt),
+                       subtitle: Text(
+-                        '${prompt.resReq} • '
+-                        '${prompt.numberOfDays} days',
++                        '${prompt.resReq}\n${PromptSchedule.rangeLabel(
++                          prompt, fallbackStartDate: state.selectedUser?.startDate)}',
+                       ),
+-                      trailing: IconButton(
+-                        icon: const Icon(
+-                          Icons.delete,
+-                        ),
+-                        onPressed: prompt.id == null
+-                            ? null
+-                            : () async {
+-                                await cubit.deletePromptFromSelectedUser(
+-                                  prompt.id!,
+-                                );
+-                              },
++                      onTap: canEdit ? () => _openForm(context, prompt) : null,
++                      trailing: Row(
++                        mainAxisSize: MainAxisSize.min,
++                        children: [
++                          IconButton(
++                            tooltip: 'Edit prompt',
++                            icon: const Icon(Icons.edit),
++                            onPressed: canEdit ? () => _openForm(context, prompt) : null,
++                          ),
++                          IconButton(
++                            tooltip: 'Delete prompt',
++                            icon: const Icon(Icons.delete),
++                            onPressed: !canEdit ? null : () async {
++                              try {
++                                await cubit.deletePromptFromSelectedUser(prompt.id!);
++                              } catch (error) {
++                                if (!context.mounted) return;
++                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
++                                  content: Text('Could not delete prompt: $error'),
++                                ));
++                              }
++                            },
++                          ),
++                        ],
+                       ),
+                     );
+                   },
+diff --git a/lib/LoginComp/core/widgets/MedicationEntryPage.dart b/lib/LoginComp/core/widgets/MedicationEntryPage.dart
+index b905d18..f5fd471 100644
+--- a/lib/LoginComp/core/widgets/MedicationEntryPage.dart
++++ b/lib/LoginComp/core/widgets/MedicationEntryPage.dart
+@@ -37,7 +37,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
+     super.initState();
+     final original = widget.medication;
+     // Never silently relabel an existing medication or copy its dose to a new drug.
+-    _medicationController.text = original?.name ?? 'Methadone';
++    _medicationController.text = original?.name ?? '';
+     _doseController.text = original?.dose ?? '';
+     _daysController.text = original?.numDays.toString() ?? '';
+     _startDate = DateUtils.dateOnly(
+@@ -131,9 +131,10 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
+             // Medication Name
+             TextField(
+               controller: _medicationController,
+-              readOnly: true,
++              textCapitalization: TextCapitalization.words,
+               decoration: InputDecoration(
+-                labelText: "Medication Name (Methadone only)",
++                labelText: "Medication Name / Type",
++                helperText: "Any name. Only one medication event per day.",
+                 labelStyle: TextStyles.font14Hint500Weight,
+                 border: OutlineInputBorder(
+                   borderSide: BorderSide(color: Colors.grey[400]!),
+@@ -153,7 +154,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
+             TextField(
+               controller: _doseController,
+               decoration: InputDecoration(
+-                labelText: "Dose",
++                labelText: "Dose (include unit)",
+                 labelStyle: TextStyles.font14Hint500Weight,
+                 border: OutlineInputBorder(
+                   borderSide: BorderSide(color: Colors.grey[400]!),
+diff --git a/lib/models/counseling_question.dart b/lib/models/counseling_question.dart
+index 188850a..90a6b0a 100644
+--- a/lib/models/counseling_question.dart
++++ b/lib/models/counseling_question.dart
+@@ -136,6 +136,15 @@ class CounselingQuestion {
+       return value;
+     }
+ 
+-    return DateTime.tryParse(value.toString());
++    if (value is String) {
++      return DateTime.tryParse(value);
++    }
++    // Read Firestore Timestamp values without coupling this model to Flutter.
++    try {
++      final converted = value.toDate();
++      return converted is DateTime ? converted.toLocal() : null;
++    } catch (_) {
++      return null;
++    }
+   }
+ }
+diff --git a/lib/models/medication_schedule.dart b/lib/models/medication_schedule.dart
+index b2eb941..b7bd7d8 100644
+--- a/lib/models/medication_schedule.dart
++++ b/lib/models/medication_schedule.dart
+@@ -8,7 +8,7 @@ class MedicationScheduleException implements Exception {
+   String toString() => message;
+ }
+ 
+-/// NODE's current app rule: Methadone, one event per calendar day.
++/// Any medication name/type; only one medication event per calendar day.
+ /// UTC is used only for date-only arithmetic, not to change the dose's local time.
+ class MedicationSchedule {
+   const MedicationSchedule._();
+@@ -70,10 +70,10 @@ class MedicationSchedule {
+       '${minute.toString().padLeft(2, '0')} ${hour < 12 ? 'AM' : 'PM'}';
+ 
+   static void validateEntry(Medication medication) {
+-    if (medication.name.trim().toLowerCase() != 'methadone') {
++    if (medication.name.trim().isEmpty ||
++        RegExp(r'[\x00-\x1F\x7F]').hasMatch(medication.name)) {
+       throw const MedicationScheduleException(
+-        'Only Methadone is supported by this program. '
+-        'Existing entries are not automatically renamed or converted.',
++        'Enter a medication name on one line, without control characters.',
+       );
+     }
+     if (medication.dose.trim().isEmpty ||
+@@ -170,7 +170,8 @@ class MedicationSchedule {
+       numDays: end(medication, fallbackStartDate: fallbackStartDate)
+           .difference(today).inDays + 1,
+       startDate: DateTime(now.year, now.month, now.day),
+-      name: 'Methadone',
++      // Keep the saved name/type. Never substitute a different medication.
++      name: medication.name,
+       frequency: 'Once daily',
+       times: clock(minutes(medication.times)! ~/ 60, minutes(medication.times)! % 60),
+     )).toList();
+diff --git a/lib/models/prompt_schedule.dart b/lib/models/prompt_schedule.dart
+new file mode 100644
+index 0000000..f20b7ec
+--- /dev/null
++++ b/lib/models/prompt_schedule.dart
+@@ -0,0 +1,110 @@
++import 'counseling_question.dart';
++import 'medication_schedule.dart';
++
++/// Date-only prompt scheduling. The start and end dates are both inclusive.
++/// This does not claim that unverified firmware supports future start dates.
++class PromptSchedule {
++  const PromptSchedule._();
++
++  static DateTime start(CounselingQuestion prompt, {DateTime? fallbackStartDate}) {
++    final date = prompt.startDate ?? fallbackStartDate;
++    if (date == null) {
++      throw const MedicationScheduleException('Set the prompt start date.');
++    }
++    return MedicationSchedule.day(date);
++  }
++
++  static DateTime lastDay(DateTime startDate, int numberOfDays) {
++    if (numberOfDays <= 0) {
++      throw const MedicationScheduleException('Enter a positive number of days.');
++    }
++    final first = MedicationSchedule.day(startDate);
++    // Avoid integer overflow in date construction on all Dart targets.
++    final maximum = DateTime.utc(9999, 12, 31).difference(first).inDays + 1;
++    if (numberOfDays > maximum) {
++      throw const MedicationScheduleException('The prompt duration is too large.');
++    }
++    return DateTime.utc(first.year, first.month, first.day + numberOfDays - 1);
++  }
++
++  static DateTime end(CounselingQuestion prompt, {DateTime? fallbackStartDate}) =>
++      lastDay(start(prompt, fallbackStartDate: fallbackStartDate), prompt.numberOfDays);
++
++  static void validateEntry(CounselingQuestion prompt, {DateTime? fallbackStartDate}) {
++    final control = RegExp(r'[\x00-\x1F\x7F]');
++    void oneLine(String value, String label, {bool mustHaveValue = true}) {
++      if ((mustHaveValue && value.trim().isEmpty) || control.hasMatch(value)) {
++        throw MedicationScheduleException('$label must be on one line without control characters.');
++      }
++    }
++    oneLine(prompt.prompt, 'The prompt');
++    oneLine(prompt.resReq, 'The response type');
++    for (final option in prompt.options) {
++      oneLine(option, 'Each response option');
++    }
++    if (prompt.streakEnabled) {
++      oneLine(prompt.streakTitle, 'The streak title');
++      oneLine(prompt.streakThreshold, 'The streak threshold', mustHaveValue: false);
++    }
++    if (prompt.tokenEnabled) {
++      oneLine(prompt.tokenTitle, 'The token title');
++      oneLine(prompt.tokenThreshold, 'The token threshold', mustHaveValue: false);
++      if (prompt.tokenQuantity <= 0) {
++        throw const MedicationScheduleException('Enter a token quantity greater than zero.');
++      }
++    }
++    end(prompt, fallbackStartDate: fallbackStartDate);
++  }
++
++  static bool isActive(CounselingQuestion prompt, DateTime onDay, {DateTime? fallbackStartDate}) {
++    if (prompt.numberOfDays <= 0 || (prompt.startDate == null && fallbackStartDate == null)) {
++      return false;
++    }
++    try {
++      final date = MedicationSchedule.day(onDay);
++      return !date.isBefore(start(prompt, fallbackStartDate: fallbackStartDate)) &&
++          !date.isAfter(end(prompt, fallbackStartDate: fallbackStartDate));
++    } on MedicationScheduleException {
++      return false;
++    }
++  }
++
++  static String dateRangeLabel(DateTime startDate, int? numberOfDays) {
++    if (numberOfDays == null || numberOfDays <= 0) return 'Enter a positive duration. Includes the start date.';
++    try {
++      return '${MedicationSchedule.dateLabel(startDate)} to '
++          '${MedicationSchedule.dateLabel(lastDay(startDate, numberOfDays))} (inclusive)';
++    } on MedicationScheduleException catch (error) {
++      return error.message;
++    }
++  }
++
++  static String rangeLabel(CounselingQuestion prompt, {DateTime? fallbackStartDate}) {
++    final first = prompt.startDate ?? fallbackStartDate;
++    if (first == null) return 'Start date not set | ${prompt.numberOfDays} days';
++    return '${dateRangeLabel(first, prompt.numberOfDays)} | ${prompt.numberOfDays} days';
++  }
++
++  /// The legacy format is relative to the time of programming, not the saved
++  /// app start date. Omit future/expired prompts and send only remaining days.
++  /// The originals (including IDs and rewards) are not mutated.
++  static List<CounselingQuestion> forLegacyTransfer(
++    List<CounselingQuestion> prompts, {
++    required DateTime now,
++    DateTime? fallbackStartDate,
++  }) {
++    final today = MedicationSchedule.day(now);
++    final result = <CounselingQuestion>[];
++    for (final prompt in prompts) {
++      final dated = prompt.startDate != null
++          ? prompt : prompt.copyWith(startDate: fallbackStartDate ?? now);
++      validateEntry(dated);
++      if (!isActive(dated, today)) continue;
++      result.add(dated.copyWith(
++        startDate: DateTime(now.year, now.month, now.day),
++        numberOfDays: end(dated).difference(today).inDays + 1,
++      ));
++    }
++    return result;
++  }
++}
+diff --git a/test/node_med_prompt_schedule_test.dart b/test/node_med_prompt_schedule_test.dart
+new file mode 100644
+index 0000000..6f7263a
+--- /dev/null
++++ b/test/node_med_prompt_schedule_test.dart
+@@ -0,0 +1,206 @@
++import 'package:flutter_test/flutter_test.dart';
++import '../lib/models/medication.dart';
++import '../lib/models/medication_schedule.dart';
++import '../lib/models/counseling_question.dart';
++import '../lib/models/prompt_schedule.dart';
++import '../lib/Bluetooth/recovery_program_file_formatter.dart';
++
++Medication medication({
++  String name = 'Example medication',
++  DateTime? start,
++  int days = 3,
++  String time = '8:00 AM',
++}) => Medication(
++  id: 'med-a', name: name, dose: '1 test unit', frequency: 'Once daily',
++  times: time, numDays: days, startDate: start ?? DateTime(2026, 10, 6),
++  streakEnabled: true, streakTitle: 'Medication streak',
++);
++
++CounselingQuestion prompt({DateTime? start, int days = 3, String text = 'Check in'}) =>
++    CounselingQuestion(
++      id: 'prompt-a', prompt: text, resReq: 'Yes', options: const ['Yes', 'No'],
++      numberOfDays: days, startDate: start ?? DateTime(2026, 10, 6),
++      tokenEnabled: true, tokenTitle: 'Check in reward', tokenThreshold: 'Yes',
++      tokenQuantity: 2,
++    );
++
++class TimestampLike {
++  final DateTime date;
++  TimestampLike(this.date);
++  DateTime toDate() => date;
++}
++
++void main() {
++  final now = DateTime(2026, 10, 7, 12);
++  final scheduleError = isA<MedicationScheduleException>();
++
++  test('arbitrary medication names are accepted and kept on the wire', () {
++    for (final name in ['Example A', 'Example B / liquid', 'TEST-123', 'M\u00e9dicament']) {
++      final value = medication(name: name);
++      expect(() => MedicationSchedule.validateEntry(value), returnsNormally);
++      final wire = RecoveryProgramFileFormatter.build(
++        medications: [value], prompts: [], generatedAt: now,
++      );
++      expect(wire, contains('Medication: $name\n'));
++      expect(wire, contains('Dose: 1 test unit\n'));
++      expect(wire, isNot(contains('Medication: Methadone')));
++    }
++  });
++
++  test('blank and control-character medication names are rejected', () {
++    for (final name in ['', '   ', 'A\nMedication: B', 'A\rB', 'A\u0000B']) {
++      expect(() => MedicationSchedule.validateEntry(medication(name: name)),
++          throwsA(scheduleError));
++    }
++  });
++
++  test('different names are allowed on nonoverlapping calendar days', () {
++    expect(() => MedicationSchedule.validateProgram([
++      medication(name: 'A', days: 2),
++      medication(name: 'B', start: DateTime(2026, 10, 8), days: 1),
++    ]), returnsNormally);
++  });
++
++  test('same and different names cannot overlap even at different times', () {
++    for (final name in ['A', 'B']) {
++      expect(() => MedicationSchedule.validateProgram([
++        medication(name: 'A'),
++        medication(name: name, start: DateTime(2026, 10, 8), time: '9:00 PM'),
++      ]), throwsA(scheduleError));
++    }
++  });
++
++  test('an edit excludes itself but still checks other medication records', () {
++    final changed = medication().copyWith(name: 'Changed');
++    expect(() => MedicationSchedule.validateCandidate(changed, []), returnsNormally);
++    expect(() => MedicationSchedule.validateCandidate(changed, [medication()]),
++        throwsA(scheduleError));
++  });
++
++  test('multiple times and invalid dose/duration remain rejected', () {
++    for (final value in [
++      medication(time: '8:00 AM, 8:00 PM'),
++      medication().copyWith(frequency: 'Twice daily'),
++      medication().copyWith(dose: ''),
++      medication(days: 0),
++    ]) {
++      expect(() => MedicationSchedule.validateEntry(value), throwsA(scheduleError));
++    }
++  });
++
++  test('legacy medication transfer clips days without mutating the record', () {
++    final original = medication(name: 'Original Name');
++    final sent = MedicationSchedule.forLegacyTransfer([original], now: now).single;
++    expect(sent.name, original.name);
++    expect(sent.dose, original.dose);
++    expect(sent.id, original.id);
++    expect(sent.streakTitle, original.streakTitle);
++    expect(sent.numDays, 2);
++    expect(original.numDays, 3);
++    expect(original.startDate, DateTime(2026, 10, 6));
++  });
++
++  test('future medication blocks are not silently sent as active today', () {
++    expect(() => MedicationSchedule.forLegacyTransfer([
++      medication(start: DateTime(2026, 10, 10)),
++    ], now: now), throwsA(scheduleError));
++  });
++
++  test('prompt date range is inclusive', () {
++    final value = prompt(start: DateTime(2026, 10, 10), days: 3);
++    expect(PromptSchedule.isActive(value, DateTime(2026, 10, 9)), isFalse);
++    expect(PromptSchedule.isActive(value, DateTime(2026, 10, 10)), isTrue);
++    expect(PromptSchedule.isActive(value, DateTime(2026, 10, 12, 23, 59)), isTrue);
++    expect(PromptSchedule.isActive(value, DateTime(2026, 10, 13)), isFalse);
++    expect(PromptSchedule.rangeLabel(value), contains('2026-10-10 to 2026-10-12'));
++  });
++
++  test('one-day prompt is active only on its start date', () {
++    final value = prompt(days: 1);
++    expect(PromptSchedule.isActive(value, DateTime(2026, 10, 6)), isTrue);
++    expect(PromptSchedule.isActive(value, DateTime(2026, 10, 7)), isFalse);
++  });
++
++  test('date-only arithmetic crosses leap days and DST without drifting', () {
++    expect(PromptSchedule.lastDay(DateTime(2028, 2, 28), 3), DateTime.utc(2028, 3, 1));
++    expect(PromptSchedule.lastDay(DateTime(2026, 10, 31), 3), DateTime.utc(2026, 11, 2));
++    expect(PromptSchedule.lastDay(DateTime(2026, 3, 7), 3), DateTime.utc(2026, 3, 9));
++  });
++
++  test('invalid prompt durations are rejected instead of overflowing', () {
++    for (final days in [0, -1, 1000000000]) {
++      expect(() => PromptSchedule.validateEntry(prompt(days: days)), throwsA(scheduleError));
++      expect(PromptSchedule.isActive(prompt(days: days), now), isFalse);
++    }
++  });
++
++  test('legacy missing prompt date can use the patient start date', () {
++    const value = CounselingQuestion(
++      prompt: 'Legacy', resReq: 'number', options: [], numberOfDays: 3,
++    );
++    expect(PromptSchedule.isActive(value, now), isFalse);
++    expect(PromptSchedule.isActive(value, now,
++        fallbackStartDate: DateTime(2026, 10, 6)), isTrue);
++  });
++
++  test('prompt serialization preserves dates, IDs, options, and rewards', () {
++    final value = prompt();
++    final decoded = CounselingQuestion.fromJson(value.toJson(), id: value.id);
++    expect(decoded.id, value.id);
++    expect(decoded.startDate, value.startDate);
++    expect(decoded.numberOfDays, value.numberOfDays);
++    expect(decoded.options, value.options);
++    expect(decoded.tokenQuantity, value.tokenQuantity);
++    expect(decoded.tokenThreshold, value.tokenThreshold);
++  });
++
++  test('prompt model reads a Firestore Timestamp-like object', () {
++    final date = DateTime(2026, 10, 10);
++    final decoded = CounselingQuestion.fromJson({
++      ...prompt().toJson(), 'startDate': TimestampLike(date),
++    });
++    expect(decoded.startDate, date);
++  });
++
++  test('prompt preparation clips remaining days and preserves its original', () {
++    final original = prompt();
++    final sent = PromptSchedule.forLegacyTransfer([original], now: now).single;
++    expect(sent.numberOfDays, 2);
++    expect(sent.id, original.id);
++    expect(sent.tokenThreshold, original.tokenThreshold);
++    expect(sent.options, original.options);
++    expect(original.numberOfDays, 3);
++    expect(original.startDate, DateTime(2026, 10, 6));
++  });
++
++  test('formatter omits future and expired prompts and keeps the active one', () {
++    final wire = RecoveryProgramFileFormatter.build(
++      medications: [medication(name: 'A')],
++      prompts: [
++        prompt(text: 'Active'),
++        prompt(text: 'Future', start: DateTime(2026, 10, 10)),
++        prompt(text: 'Expired', start: DateTime(2026, 10, 1)),
++      ],
++      generatedAt: now,
++    );
++    expect(wire, contains('Prompt: Active\n'));
++    expect(wire, isNot(contains('Prompt: Future')));
++    expect(wire, isNot(contains('Prompt: Expired')));
++    expect(wire, contains('Days: 1 to 2\n'));
++    expect(wire, isNot(contains('EOF')));
++  });
++
++  test('an empty active program is rejected before Bluetooth transfer', () {
++    expect(() => RecoveryProgramFileFormatter.build(
++      medications: [], prompts: [prompt(start: DateTime(2026, 10, 10))],
++      generatedAt: now,
++    ), throwsA(scheduleError));
++  });
++
++  test('prompt and reward newlines cannot inject protocol fields', () {
++    expect(() => PromptSchedule.validateEntry(prompt(text: 'A\nPrompt: B')),
++        throwsA(scheduleError));
++    expect(() => PromptSchedule.validateEntry(prompt().copyWith(tokenTitle: 'A\nB')),
++        throwsA(scheduleError));
++  });
++}
+diff --git a/test/node_prompt_editor_test.dart b/test/node_prompt_editor_test.dart
+new file mode 100644
+index 0000000..59b856c
+--- /dev/null
++++ b/test/node_prompt_editor_test.dart
+@@ -0,0 +1,137 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_screenutil/flutter_screenutil.dart';
++import 'package:flutter_test/flutter_test.dart';
++import '../lib/GetStarted/enter_counseling_data.dart';
++import '../lib/models/counseling_question.dart';
++
++class EditResult {
++  CounselingQuestion? value;
++}
++
++Future<EditResult> openEditor(WidgetTester tester, CounselingQuestion original) async {
++  final result = EditResult();
++  tester.view.physicalSize = const Size(1000, 1800);
++  tester.view.devicePixelRatio = 1;
++  addTearDown(tester.view.resetPhysicalSize);
++  addTearDown(tester.view.resetDevicePixelRatio);
++  await tester.pumpWidget(ScreenUtilInit(
++    designSize: const Size(390, 844),
++    builder: (_, __) => MaterialApp(
++      home: Builder(builder: (context) => Scaffold(
++        body: TextButton(
++          child: const Text('Open editor'),
++          onPressed: () async {
++            result.value = await Navigator.push<CounselingQuestion>(
++              context,
++              MaterialPageRoute(builder: (_) => EnterCounselingPrompts(
++                medications: const [], initialPrompt: original, returnResultOnly: true,
++              )),
++            );
++          },
++        ),
++      )),
++    ),
++  ));
++  await tester.pumpAndSettle();
++  await tester.tap(find.text('Open editor'));
++  await tester.pumpAndSettle();
++  return result;
++}
++
++Future<void> save(WidgetTester tester) async {
++  await tester.ensureVisible(find.byKey(const ValueKey('prompt-save')));
++  await tester.tap(find.byKey(const ValueKey('prompt-save')));
++  await tester.pumpAndSettle();
++}
++
++CounselingQuestion example() => CounselingQuestion(
++  id: 'existing-id', prompt: 'Original prompt', resReq: 'Yes',
++  options: const ['Yes', 'No'], startDate: DateTime(2026, 10, 10), numberOfDays: 3,
++  streakEnabled: true, streakTitle: 'Original streak', streakThreshold: 'No',
++  tokenEnabled: true, tokenTitle: 'Original token', tokenThreshold: 'Yes', tokenQuantity: 2,
++);
++
++void main() {
++  testWidgets('editing text and duration retains ID, date, response, and rewards', (tester) async {
++    final original = example();
++    final result = await openEditor(tester, original);
++    await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Edited prompt');
++    await tester.ensureVisible(find.byKey(const ValueKey('prompt-days')));
++    await tester.enterText(find.byKey(const ValueKey('prompt-days')), '7');
++    await save(tester);
++    expect(result.value, isNotNull);
++    expect(result.value!.id, original.id);
++    expect(result.value!.prompt, 'Edited prompt');
++    expect(result.value!.numberOfDays, 7);
++    expect(result.value!.startDate, original.startDate);
++    expect(result.value!.options, original.options);
++    expect(result.value!.streakTitle, original.streakTitle);
++    expect(result.value!.streakThreshold, original.streakThreshold);
++    expect(result.value!.tokenThreshold, original.tokenThreshold);
++    expect(result.value!.tokenQuantity, original.tokenQuantity);
++    expect(original.prompt, 'Original prompt');
++  });
++
++  testWidgets('start date can be selected independently of duration', (tester) async {
++    final result = await openEditor(tester, example());
++    await tester.ensureVisible(find.byKey(const ValueKey('prompt-start')));
++    await tester.tap(find.byKey(const ValueKey('prompt-start')));
++    await tester.pumpAndSettle();
++    await tester.tap(find.text('15').last);
++    await tester.tap(find.text('OK'));
++    await tester.pumpAndSettle();
++    await save(tester);
++    expect(result.value!.startDate, DateTime(2026, 10, 15));
++    expect(result.value!.numberOfDays, 3);
++  });
++
++  testWidgets('invalid duration does not save an edit', (tester) async {
++    final result = await openEditor(tester, example());
++    await tester.ensureVisible(find.byKey(const ValueKey('prompt-days')));
++    await tester.enterText(find.byKey(const ValueKey('prompt-days')), '0');
++    await save(tester);
++    expect(result.value, isNull);
++    expect(find.text('Enter a valid number of days.'), findsOneWidget);
++  });
++
++  testWidgets('legacy number response loads without changing its encoding', (tester) async {
++    final original = example().copyWith(
++      resReq: 'number', options: [], streakThreshold: '<=5', tokenThreshold: '>3',
++    );
++    final result = await openEditor(tester, original);
++    expect(tester.takeException(), isNull);
++    await save(tester);
++    expect(result.value!.resReq, 'number');
++    expect(result.value!.options, isEmpty);
++    expect(result.value!.streakThreshold, '<=5');
++    expect(result.value!.tokenThreshold, '>3');
++  });
++
++  testWidgets('legacy yes_no can be edited without replacing options', (tester) async {
++    final original = example().copyWith(resReq: 'yes_no', options: []);
++    final result = await openEditor(tester, original);
++    await save(tester);
++    expect(result.value!.resReq, 'yes_no');
++    expect(result.value!.options, isEmpty);
++  });
++
++  testWidgets('custom response options survive unrelated edits', (tester) async {
++    final original = example().copyWith(resReq: 'custom', options: ['Low', 'Medium', 'High']);
++    final result = await openEditor(tester, original);
++    await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Changed text');
++    await save(tester);
++    expect(result.value!.resReq, 'custom');
++    expect(result.value!.options, ['Low', 'Medium', 'High']);
++    expect(result.value!.tokenThreshold, original.tokenThreshold);
++  });
++
++  testWidgets('back navigation cancels without modifying the original', (tester) async {
++    final original = example();
++    final result = await openEditor(tester, original);
++    await tester.enterText(find.byKey(const ValueKey('prompt-text')), 'Not saved');
++    await tester.pageBack();
++    await tester.pumpAndSettle();
++    expect(result.value, isNull);
++    expect(original.prompt, 'Original prompt');
++  });
++}
+diff --git a/lib/HomePage/calendar_widg.dart b/lib/HomePage/calendar_widg.dart
+--- a/lib/HomePage/calendar_widg.dart
++++ b/lib/HomePage/calendar_widg.dart
+@@ -21,2 +21,3 @@
+ import '../models/medication_schedule.dart';
++import '../models/prompt_schedule.dart';
+ import 'recovery_cache_codec.dart';
+@@ -308,19 +309,9 @@
+   List<CounselingQuestion> _getPromptsForDay(DateTime day) {
+-    return widget.prompts.where((prompt) {
+-      final numberOfDays = prompt.numberOfDays;
+-      final activityStart = prompt.startDate ?? widget.StartDate;
+-      final activityEnd = activityStart.add(Duration(days: numberOfDays - 1));
+-
+-      final normalizedDay = DateTime(day.year, day.month, day.day);
+-      final normalizedStart =
+-          DateTime(activityStart.year, activityStart.month, activityStart.day);
+-      final normalizedEnd =
+-          DateTime(activityEnd.year, activityEnd.month, activityEnd.day);
+-
+-      return normalizedDay
+-              .isAfter(normalizedStart.subtract(const Duration(days: 1))) &&
+-          normalizedDay.isBefore(normalizedEnd.add(const Duration(days: 1)));
+-    }).toList();
++    return widget.prompts.where((prompt) => PromptSchedule.isActive(
++      prompt,
++      day,
++      fallbackStartDate: widget.StartDate,
++    )).toList();
+   }
+ 
+   List<Medication> _getMedicationsForDay(DateTime day) {
+diff --git a/lib/GetStarted/provider_main_screen.dart b/lib/GetStarted/provider_main_screen.dart
+--- a/lib/GetStarted/provider_main_screen.dart
++++ b/lib/GetStarted/provider_main_screen.dart
+@@ -12,2 +12,3 @@
+ import '../models/medication_schedule.dart';
++import '../models/prompt_schedule.dart';
+ import 'provider_program_editor_screen.dart';
+@@ -205,35 +206,9 @@
+     DateTime day,
+     DateTime fallbackStartDate,
+   ) {
+-    if (prompt.numberOfDays <= 0) {
+-      return false;
+-    }
+-
+-    final promptStart =
+-        prompt.startDate ?? fallbackStartDate;
+-
+-    final promptEnd = promptStart.add(
+-      Duration(days: prompt.numberOfDays - 1),
++    return PromptSchedule.isActive(
++      prompt,
++      day,
++      fallbackStartDate: fallbackStartDate,
+     );
+-
+-    final normalizedDay = DateTime(
+-      day.year,
+-      day.month,
+-      day.day,
+-    );
+-
+-    final normalizedStart = DateTime(
+-      promptStart.year,
+-      promptStart.month,
+-      promptStart.day,
+-    );
+-
+-    final normalizedEnd = DateTime(
+-      promptEnd.year,
+-      promptEnd.month,
+-      promptEnd.day,
+-    );
+-
+-    return !normalizedDay.isBefore(normalizedStart) &&
+-        !normalizedDay.isAfter(normalizedEnd);
+   }
+@@ -304,3 +279,4 @@
+         medications: state.selectedMedications,
+         prompts: activePrompts,
++        generatedAt: today,
+         fallbackStartDate: patientStartDate,
+@@ -349,3 +325,4 @@
+           content: Text(
+-            '${selectedPatient.displayName} was sent to NODE.',
++            '${selectedPatient.displayName}: active program sent to NODE. '
++            'Future and expired prompts were not sent. Reprogram when a future prompt starts.',
+           ),
+diff --git a/lib/LoginComp/data/firestore_provider_repository.dart b/lib/LoginComp/data/firestore_provider_repository.dart
+--- a/lib/LoginComp/data/firestore_provider_repository.dart
++++ b/lib/LoginComp/data/firestore_provider_repository.dart
+@@ -6,2 +6,3 @@
+ import '../../models/medication_schedule.dart';
++import '../../models/prompt_schedule.dart';
+ import '../logic/provider/provider_user.dart';
+@@ -648,5 +649,6 @@
+     final promptToSave = prompt.startDate == null
+         ? prompt.copyWith(startDate: DateTime.now())
+         : prompt;
++    PromptSchedule.validateEntry(promptToSave);
+ 
+     await reference.set(
+@@ -683,7 +685,8 @@
+-    await _prompts(clinicId, patientId).doc(promptId).set(
++    PromptSchedule.validateEntry(prompt);
++    // Update this ID only: do not recreate a prompt deleted while editing.
++    await _prompts(clinicId, patientId).doc(promptId).update(
+           _programData(
+             prompt.toJson(),
+             creating: false,
+           ),
+-          SetOptions(merge: true),
+         );

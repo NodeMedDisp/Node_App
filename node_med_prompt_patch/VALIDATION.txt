@@ -1,0 +1,19 @@
+Preparation validation results
+
+PASS: original blob hashes for 7 complete fetched source files.
+PASS: exact source-context changes for 3 additional integration files.
+PASS: combined patch apply --check / apply / diff --check / reverse --check / reverse
+      using complete-file and isolated-excerpt fixtures.
+PASS: resulting core files match edited versions byte-for-byte.
+PASS: Dart lexical/delimiter sanity checks on 10 complete edited/new Dart files.
+PASS: shell script syntax.
+PASS: shell wrapper dry-run and application in adapted isolated fixtures.
+PASS: shell wrapper refuses second application, tracked local edits, and new-file collisions.
+PASS: patch SHA-256 and 13-file change inventory.
+
+NOT RUN: Dart compilation or formatting, flutter test, flutter analyze, Android build,
+         Firestore integration, native PowerShell execution, Bluetooth/device testing.
+
+Excerpt fixtures are not a full checkout. Placeholder gaps are not included in
+this package. The apply scripts verify all 10 original file hashes and perform
+Git's patch preflight in the user's actual checkout.
