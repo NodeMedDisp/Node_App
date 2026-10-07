@@ -1,6 +1,7 @@
 import '../models/counseling_question.dart';
 import '../models/medication.dart';
 import '../models/medication_schedule.dart';
+import '../models/prompt_schedule.dart';
 
 /// Generates the exact configuration-file format understood by NODE.
 ///
@@ -23,8 +24,16 @@ class RecoveryProgramFileFormatter {
       now: timestamp,
       fallbackStartDate: fallbackStartDate,
     );
-    if (medications.isNotEmpty && transferMedications.isEmpty && prompts.isEmpty) {
-      throw const MedicationScheduleException('Nothing sent. There is no active medication today.');
+    final transferPrompts = PromptSchedule.forLegacyTransfer(
+      prompts,
+      now: timestamp,
+      fallbackStartDate: fallbackStartDate,
+    );
+    if (transferMedications.isEmpty && transferPrompts.isEmpty) {
+      throw const MedicationScheduleException(
+        'Nothing sent. There is no active medication or prompt today. '
+        'Future entries remain saved in the app.',
+      );
     }
     final buffer = StringBuffer();
 
@@ -59,7 +68,7 @@ class RecoveryProgramFileFormatter {
       buffer.writeln();
     }
 
-    for (final prompt in prompts) {
+    for (final prompt in transferPrompts) {
       buffer.writeln('Prompt: ${prompt.prompt}');
       buffer.writeln('Required Response: ${prompt.resReq}');
       buffer.writeln('Options: ${prompt.options.join(', ')}');

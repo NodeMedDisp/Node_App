@@ -4,8 +4,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../LoginComp/core/widgets/MedicationEntryPage.dart';
 import '../LoginComp/logic/provider/provider_cubit.dart';
-import '/../../LoginComp/theming/styles.dart';
-import '/../../LoginComp/theming/colors.dart';
+import '../LoginComp/theming/styles.dart';
+import '../LoginComp/theming/colors.dart';
 import 'counseling_questions_screen.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../models/medication.dart';
@@ -28,8 +28,7 @@ class EnterPrescriptionData extends StatefulWidget {
 }
 
 class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
-  final TextEditingController _medicationController =
-      TextEditingController(text: 'Methadone');
+  final TextEditingController _medicationController = TextEditingController();
   final TextEditingController _doseController = TextEditingController();
   final TextEditingController _daysController = TextEditingController();
   final TextEditingController _streakTitleController = TextEditingController();
@@ -155,7 +154,8 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
 
     if (providerCubit != null &&
         providerCubit.state.selectedUser?.id != _patientAtOpen) {
-      _showError('The selected patient changed. Close this form and open it again.');
+      _showError(
+          'The selected patient changed. Close this form and open it again.');
       return;
     }
     try {
@@ -214,7 +214,7 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
     setState(() {
       medications.add(newMed);
 
-      _medicationController.text = 'Methadone';
+      _medicationController.clear();
       _doseController.clear();
       _daysController.clear();
 
@@ -348,9 +348,10 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
             children: [
               TextField(
                 controller: _medicationController,
-                readOnly: true,
+                textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
-                  labelText: "Medication Name (Methadone only)",
+                  labelText: "Medication Name / Type",
+                  helperText: "Any name. Only one medication event per day.",
                   labelStyle: TextStyles.font14Hint500Weight,
                   border: const OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.black, width: 1.5),
@@ -367,9 +368,11 @@ class _EnterPrescriptionDataState extends State<EnterPrescriptionData> {
               SizedBox(height: 20.h),
               TextField(
                 controller: _doseController,
-                keyboardType: TextInputType.number,
+                keyboardType: TextInputType.text,
                 decoration: InputDecoration(
-                  labelText: "Number of Milligrams Per Dose",
+                  labelText: "Dose (include unit)",
+                  helperText:
+                      "Enter the prescribed value and unit; no conversion is performed.",
                   labelStyle: TextStyles.font14Hint500Weight,
                   border: const OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.black, width: 1.5),

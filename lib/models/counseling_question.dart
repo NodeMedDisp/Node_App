@@ -136,6 +136,15 @@ class CounselingQuestion {
       return value;
     }
 
-    return DateTime.tryParse(value.toString());
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    // Read Firestore Timestamp values without coupling this model to Flutter.
+    try {
+      final converted = value.toDate();
+      return converted is DateTime ? converted.toLocal() : null;
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -37,7 +37,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
     super.initState();
     final original = widget.medication;
     // Never silently relabel an existing medication or copy its dose to a new drug.
-    _medicationController.text = original?.name ?? 'Methadone';
+    _medicationController.text = original?.name ?? '';
     _doseController.text = original?.dose ?? '';
     _daysController.text = original?.numDays.toString() ?? '';
     _startDate = DateUtils.dateOnly(
@@ -131,9 +131,10 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             // Medication Name
             TextField(
               controller: _medicationController,
-              readOnly: true,
+              textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
-                labelText: "Medication Name (Methadone only)",
+                labelText: "Medication Name / Type",
+                helperText: "Any name. Only one medication event per day.",
                 labelStyle: TextStyles.font14Hint500Weight,
                 border: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.grey[400]!),
@@ -153,7 +154,7 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             TextField(
               controller: _doseController,
               decoration: InputDecoration(
-                labelText: "Dose",
+                labelText: "Dose (include unit)",
                 labelStyle: TextStyles.font14Hint500Weight,
                 border: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.grey[400]!),

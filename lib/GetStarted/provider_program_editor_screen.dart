@@ -6,6 +6,8 @@ import '../LoginComp/logic/provider/provider_cubit.dart';
 import '../LoginComp/logic/provider/provider_state.dart';
 import '../models/medication.dart';
 import '../models/medication_schedule.dart';
+import '../models/counseling_question.dart';
+import '../models/prompt_schedule.dart';
 import 'enter_counseling_data.dart';
 import 'enter_medication_data.dart';
 
@@ -181,14 +183,29 @@ class _MedicationList extends StatelessWidget {
 class _PromptList extends StatelessWidget {
   final ProviderState state;
 
-  const _PromptList({
-    required this.state,
-  });
+  const _PromptList({required this.state});
+
+  void _openForm(BuildContext context, [CounselingQuestion? prompt]) {
+    final cubit = context.read<ProviderCubit>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: cubit,
+          child: EnterCounselingPrompts(
+            medications: state.selectedMedications,
+            initialPrompt: prompt,
+            // Existing legacy records use the patient's start, not today's date.
+            fallbackStartDate: prompt == null ? null : state.selectedUser?.startDate,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderCubit>();
-
     return Column(
       children: [
         Padding(
@@ -198,52 +215,50 @@ class _PromptList extends StatelessWidget {
             child: ElevatedButton.icon(
               icon: const Icon(Icons.add),
               label: const Text('Add Counseling Question'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => BlocProvider.value(
-                      value: cubit,
-                      child: EnterCounselingPrompts(
-                        medications: state.selectedMedications,
-                      ),
-                    ),
-                  ),
-                );
-              },
+              onPressed: state.saving ? null : () => _openForm(context),
             ),
           ),
         ),
         Expanded(
           child: state.selectedPrompts.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No counseling questions are configured.',
-                  ),
-                )
+              ? const Center(child: Text('No counseling questions are configured.'))
               : ListView.separated(
                   itemCount: state.selectedPrompts.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final prompt = state.selectedPrompts[index];
-
+                    final canEdit = prompt.id != null && !state.saving;
                     return ListTile(
+                      key: prompt.id == null ? null : ValueKey('prompt-${prompt.id}'),
                       title: Text(prompt.prompt),
                       subtitle: Text(
-                        '${prompt.resReq} • '
-                        '${prompt.numberOfDays} days',
+                        '${prompt.resReq}\n${PromptSchedule.rangeLabel(
+                          prompt, fallbackStartDate: state.selectedUser?.startDate)}',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.delete,
-                        ),
-                        onPressed: prompt.id == null
-                            ? null
-                            : () async {
-                                await cubit.deletePromptFromSelectedUser(
-                                  prompt.id!,
-                                );
-                              },
+                      onTap: canEdit ? () => _openForm(context, prompt) : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Edit prompt',
+                            icon: const Icon(Icons.edit),
+                            onPressed: canEdit ? () => _openForm(context, prompt) : null,
+                          ),
+                          IconButton(
+                            tooltip: 'Delete prompt',
+                            icon: const Icon(Icons.delete),
+                            onPressed: !canEdit ? null : () async {
+                              try {
+                                await cubit.deletePromptFromSelectedUser(prompt.id!);
+                              } catch (error) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text('Could not delete prompt: $error'),
+                                ));
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },

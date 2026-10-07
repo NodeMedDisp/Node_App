@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/counseling_question.dart';
 import '../../models/medication.dart';
 import '../../models/medication_schedule.dart';
+import '../../models/prompt_schedule.dart';
 import '../logic/provider/provider_user.dart';
 import 'provider_repository.dart';
 
@@ -639,6 +640,7 @@ class FirestoreProviderRepository implements ProviderRepository {
     final promptToSave = prompt.startDate == null
         ? prompt.copyWith(startDate: DateTime.now())
         : prompt;
+    PromptSchedule.validateEntry(promptToSave);
 
     await reference.set(
       _programData(
@@ -669,12 +671,13 @@ class FirestoreProviderRepository implements ProviderRepository {
       'patient=$patientId id=$promptId',
     );
 
-    await _prompts(clinicId, patientId).doc(promptId).set(
+    PromptSchedule.validateEntry(prompt);
+    // Update this ID only: do not recreate a prompt deleted while editing.
+    await _prompts(clinicId, patientId).doc(promptId).update(
           _programData(
             prompt.toJson(),
             creating: false,
           ),
-          SetOptions(merge: true),
         );
   }
 

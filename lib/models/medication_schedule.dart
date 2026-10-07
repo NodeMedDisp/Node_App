@@ -8,7 +8,7 @@ class MedicationScheduleException implements Exception {
   String toString() => message;
 }
 
-/// NODE's current app rule: Methadone, one event per calendar day.
+/// Any medication name/type; only one medication event per calendar day.
 /// UTC is used only for date-only arithmetic, not to change the dose's local time.
 class MedicationSchedule {
   const MedicationSchedule._();
@@ -70,10 +70,10 @@ class MedicationSchedule {
       '${minute.toString().padLeft(2, '0')} ${hour < 12 ? 'AM' : 'PM'}';
 
   static void validateEntry(Medication medication) {
-    if (medication.name.trim().toLowerCase() != 'methadone') {
+    if (medication.name.trim().isEmpty ||
+        RegExp(r'[\x00-\x1F\x7F]').hasMatch(medication.name)) {
       throw const MedicationScheduleException(
-        'Only Methadone is supported by this program. '
-        'Existing entries are not automatically renamed or converted.',
+        'Enter a medication name on one line, without control characters.',
       );
     }
     if (medication.dose.trim().isEmpty ||
@@ -170,7 +170,8 @@ class MedicationSchedule {
       numDays: end(medication, fallbackStartDate: fallbackStartDate)
           .difference(today).inDays + 1,
       startDate: DateTime(now.year, now.month, now.day),
-      name: 'Methadone',
+      // Keep the saved name/type. Never substitute a different medication.
+      name: medication.name,
       frequency: 'Once daily',
       times: clock(minutes(medication.times)! ~/ 60, minutes(medication.times)! % 60),
     )).toList();

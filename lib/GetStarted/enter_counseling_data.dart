@@ -4,18 +4,30 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'summary_screen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../LoginComp/logic/provider/provider_cubit.dart';
-import '/../../LoginComp/theming/styles.dart';
-import '/../../LoginComp/theming/colors.dart';
+import '../LoginComp/theming/styles.dart';
+import '../LoginComp/theming/colors.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../models/medication.dart';
 import '../models/counseling_question.dart';
+import '../models/medication_schedule.dart';
+import '../models/prompt_schedule.dart';
 
 class EnterCounselingPrompts extends StatefulWidget {
   final List<Medication> medications;
   final BluetoothDevice? device;
+  final CounselingQuestion? initialPrompt;
+  final DateTime? fallbackStartDate;
+  // Used when editing a local draft: return a value, never write to Firestore.
+  final bool returnResultOnly;
 
-  const EnterCounselingPrompts(
-      {super.key, required this.medications, this.device});
+  const EnterCounselingPrompts({
+    super.key,
+    required this.medications,
+    this.device,
+    this.initialPrompt,
+    this.fallbackStartDate,
+    this.returnResultOnly = false,
+  });
 
   @override
   _EnterCounselingPrompts createState() => _EnterCounselingPrompts();
@@ -46,8 +58,114 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
   String? _responseType;
   List<CounselingQuestion> prompts = [];
   String? _errorMessage;
+  late DateTime _startDate;
+  ProviderCubit? _providerCubit;
+  String? _patientAtOpen;
+  bool _saving = false;
+  bool _responseChanged = false;
+  bool _streakThresholdChanged = false;
+  bool _tokenThresholdChanged = false;
+
+  bool get _editing => widget.initialPrompt != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.returnResultOnly) {
+      try {
+        _providerCubit = context.read<ProviderCubit>();
+        _patientAtOpen = _providerCubit?.state.selectedUser?.id;
+      } catch (_) {
+        // Standalone setup does not have a provider cubit.
+      }
+    }
+    final original = widget.initialPrompt;
+    _startDate = DateUtils.dateOnly(original == null
+        ? (widget.fallbackStartDate ?? DateTime.now())
+        : (original.startDate ??
+            widget.fallbackStartDate ??
+            _providerCubit?.state.selectedUser?.startDate ??
+            DateTime.now()));
+    if (original == null) return;
+
+    _promptController.text = original.prompt;
+    _daysController.text = original.numberOfDays.toString();
+    _streakEnabled = original.streakEnabled;
+    _streakTitleController.text = original.streakTitle;
+    _tokenEnabled = original.tokenEnabled;
+    _tokenTitleController.text = original.tokenTitle;
+    _tokenQuantityController.text =
+        original.tokenQuantity > 0 ? original.tokenQuantity.toString() : '1';
+
+    final responseRequirement = original.resReq.trim().toLowerCase();
+    final options =
+        original.options.map((v) => v.trim().toLowerCase()).join(',');
+    if (responseRequirement == 'yes_no' ||
+        (responseRequirement == 'yes' && options == 'yes,no')) {
+      _responseRequired = 'Yes';
+      _responseType = 'Yes/No';
+    } else if (responseRequirement == 'number' ||
+        (responseRequirement == 'yes' && options == '1,2,3,4,5,6,7,8,9,10')) {
+      _responseRequired = 'Yes';
+      _responseType = '1-10 Scale';
+    } else if (responseRequirement == 'journal response') {
+      _responseRequired = 'Journal Response';
+    } else {
+      // Preserve legacy/custom response options unless explicitly changed.
+      _responseRequired = 'Keep existing response';
+    }
+    _loadThreshold(original.streakThreshold, streak: true);
+    _loadThreshold(original.tokenThreshold, streak: false);
+  }
+
+  void _loadThreshold(String value, {required bool streak}) {
+    final match = RegExp(r'^(<=|>=|<|>|=)?\s*(\d+)$').firstMatch(value.trim());
+    final operator = match?.group(1) ?? '=';
+    final number = match?.group(2) ?? '';
+    final yesNo = value.trim().replaceFirst(RegExp(r'^=\s*'), '').toLowerCase();
+    if (streak) {
+      _streakOperator = operator;
+      _streakThresholdController.text = number;
+      _streakYesNoThreshold = yesNo == 'no' ? 'No' : 'Yes';
+    } else {
+      _tokenOperator = operator;
+      _tokenThresholdController.text = number;
+      _tokenYesNoThreshold = yesNo == 'no' ? 'No' : 'Yes';
+    }
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(_startDate.year < 2000 ? _startDate.year : 2000),
+      lastDate:
+          DateTime(_startDate.year > 2100 ? _startDate.year : 2100, 12, 31),
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _startDate = DateUtils.dateOnly(picked));
+  }
+
+  Future<void> _editDraft(int index) async {
+    final original = prompts[index];
+    final updated = await Navigator.push<CounselingQuestion>(
+      context,
+      MaterialPageRoute(
+          builder: (_) => EnterCounselingPrompts(
+                medications: widget.medications,
+                device: widget.device,
+                initialPrompt: original,
+                fallbackStartDate: _startDate,
+                returnResultOnly: true,
+              )),
+    );
+    if (!mounted || updated == null) return;
+    final currentIndex = prompts.indexOf(original);
+    if (currentIndex >= 0) setState(() => prompts[currentIndex] = updated);
+  }
 
   Future<void> _addPrompt() async {
+    if (_saving) return;
     final promptText = _promptController.text.trim();
     final numberOfDays = int.tryParse(_daysController.text.trim());
 
@@ -110,7 +228,9 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
 
     final List<String> options;
 
-    if (_responseRequired == 'Yes' && _responseType == 'Yes/No') {
+    if (_responseRequired == 'Keep existing response') {
+      options = List<String>.of(widget.initialPrompt!.options);
+    } else if (_responseRequired == 'Yes' && _responseType == 'Yes/No') {
       options = ['Yes', 'No'];
     } else if (_responseRequired == 'Yes' && _responseType == '1-10 Scale') {
       options = List.generate(
@@ -133,39 +253,65 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
       yesNoThreshold: _tokenYesNoThreshold,
     );
 
+    final original = widget.initialPrompt;
+    final keepResponse = original != null &&
+        (!_responseChanged || _responseRequired == 'Keep existing response');
     final newPrompt = CounselingQuestion(
+      id: original?.id,
       prompt: promptText,
-      resReq: _responseRequired,
-      options: options,
+      resReq: keepResponse ? original!.resReq : _responseRequired,
+      options: keepResponse ? List<String>.of(original!.options) : options,
       numberOfDays: numberOfDays,
+      startDate: _startDate,
       streakEnabled: _streakEnabled,
-      streakTitle: _streakEnabled ? _streakTitleController.text.trim() : '',
-      streakThreshold: _streakEnabled ? streakThreshold : 'None',
+      streakTitle: _streakTitleController.text.trim(),
+      streakThreshold: _streakEnabled
+          ? (keepResponse && !_streakThresholdChanged && original!.streakEnabled
+              ? original!.streakThreshold
+              : streakThreshold)
+          : (original?.streakThreshold ?? 'None'),
       tokenEnabled: _tokenEnabled,
-      tokenTitle: _tokenEnabled ? _tokenTitleController.text.trim() : '',
-      tokenThreshold: _tokenEnabled ? tokenThreshold : 'None',
-      tokenQuantity:
-          _tokenEnabled ? int.parse(_tokenQuantityController.text.trim()) : 0,
+      tokenTitle: _tokenTitleController.text.trim(),
+      tokenThreshold: _tokenEnabled
+          ? (keepResponse && !_tokenThresholdChanged && original!.tokenEnabled
+              ? original!.tokenThreshold
+              : tokenThreshold)
+          : (original?.tokenThreshold ?? 'None'),
+      tokenQuantity: _tokenEnabled
+          ? int.parse(_tokenQuantityController.text.trim())
+          : (original?.tokenQuantity ?? 0),
     );
 
-    ProviderCubit? providerCubit;
-
     try {
-      providerCubit = context.read<ProviderCubit>();
-    } catch (_) {
-      providerCubit = null;
+      PromptSchedule.validateEntry(newPrompt);
+    } on MedicationScheduleException catch (error) {
+      setState(() => _errorMessage = error.message);
+      return;
     }
-
+    if (widget.returnResultOnly) {
+      Navigator.pop(context, newPrompt);
+      return;
+    }
+    final providerCubit = _providerCubit;
     if (providerCubit != null) {
+      if (_patientAtOpen == null ||
+          providerCubit.state.selectedUser?.id != _patientAtOpen) {
+        setState(() => _errorMessage =
+            'The selected patient changed. Close this form and open it again.');
+        return;
+      }
+      setState(() => _saving = true);
       try {
         debugPrint(
           'PROVIDER PROMPT FORM: '
           'Saving "${newPrompt.prompt}"',
         );
 
-        await providerCubit.addPromptToSelectedUser(
-          newPrompt,
-        );
+        if (_editing) {
+          await providerCubit.updatePromptForSelectedUser(newPrompt);
+        } else {
+          await providerCubit.addPromptToSelectedUser(newPrompt);
+        }
 
         debugPrint(
           'PROVIDER PROMPT FORM: Save completed',
@@ -189,8 +335,14 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
         setState(() {
           _errorMessage = 'Could not save prompt: $error';
         });
+      } finally {
+        if (mounted) setState(() => _saving = false);
       }
 
+      return;
+    }
+    if (_editing) {
+      Navigator.pop(context, newPrompt);
       return;
     }
 
@@ -199,6 +351,9 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
 
       _promptController.clear();
       _daysController.clear();
+      _responseChanged = false;
+      _streakThresholdChanged = false;
+      _tokenThresholdChanged = false;
 
       _responseRequired = 'Require a Response?';
       _responseType = null;
@@ -246,6 +401,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
     required String yesNoThreshold,
     required ValueChanged<String?> onYesNoChanged,
     TextEditingController? quantityController,
+    required VoidCallback onThresholdChanged,
   }) {
     final isToken = quantityController != null;
 
@@ -307,6 +463,7 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     Expanded(
                       child: TextField(
                         controller: numericThresholdController,
+                        onChanged: (_) => onThresholdChanged(),
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
@@ -349,6 +506,9 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
                     'None — reward when the journal response is submitted',
                   ),
                 )
+              else if (_responseRequired == 'Keep existing response')
+                const Text(
+                    'The existing response options and thresholds are retained.')
               else
                 const Text(
                   'Select the required response and response type above.',
@@ -432,242 +592,290 @@ class _EnterCounselingPrompts extends State<EnterCounselingPrompts> {
 
   @override
   Widget build(BuildContext context) {
-    bool isProvider = false;
-    try {
-      isProvider = context.read<ProviderCubit>().state.selectedUser != null;
-    } catch (_) {}
+    final isProvider = _providerCubit != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Enter Counseling Prompts")),
+      appBar: AppBar(
+          title: Text(_editing
+              ? 'Edit Counseling Prompt'
+              : 'Enter Counseling Prompts')),
       resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              TextField(
-                controller: _promptController,
-                decoration: InputDecoration(
-                  labelText: "Enter Prompt Here",
-                  labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.grey[400]!)),
-                  enabledBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black, width: 1.5),
-                  ),
-                  focusedBorder: const OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+      body: AbsorbPointer(
+        absorbing: _saving,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                TextField(
+                  key: const ValueKey('prompt-text'),
+                  controller: _promptController,
+                  decoration: InputDecoration(
+                    labelText: "Enter Prompt Here",
+                    labelStyle: TextStyles.font14Hint500Weight,
+                    border: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[400]!)),
+                    enabledBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.black, width: 1.5),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide:
+                          BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(height: 10.h),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _responseRequired,
-                      items: ['Require a Response?', 'Yes', 'Journal Response']
-                          .map((resReq) {
-                        return DropdownMenuItem<String>(
-                            value: resReq, child: Text(resReq));
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value == null) {
-                          return;
-                        }
-
-                        setState(() {
-                          _responseRequired = value;
-
-                          if (_responseRequired != 'Yes') {
-                            _responseType = null;
+                SizedBox(height: 10.h),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _responseRequired,
+                        items: [
+                          'Require a Response?',
+                          'Yes',
+                          'Journal Response',
+                          if (_editing) 'Keep existing response',
+                        ].map((resReq) {
+                          return DropdownMenuItem<String>(
+                              value: resReq, child: Text(resReq));
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
                           }
 
-                          _errorMessage = null;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[400]!)),
-                        enabledBorder: const OutlineInputBorder(
-                          borderSide:
-                              BorderSide(color: Colors.black, width: 1.5),
-                        ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(
-                              color: ColorsManager.mainBlue, width: 2.0),
+                          setState(() {
+                            _responseRequired = value;
+                            _responseChanged = true;
+
+                            if (_responseRequired != 'Yes') {
+                              _responseType = null;
+                            }
+
+                            _errorMessage = null;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.grey[400]!)),
+                          enabledBorder: const OutlineInputBorder(
+                            borderSide:
+                                BorderSide(color: Colors.black, width: 1.5),
+                          ),
+                          focusedBorder: const OutlineInputBorder(
+                            borderSide: BorderSide(
+                                color: ColorsManager.mainBlue, width: 2.0),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 10.h),
-              if (_responseRequired == 'Yes') ...[
-                const Text(
-                  "Select Response Type:",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ],
                 ),
-                RadioListTile<String>(
-                  title: const Text('Yes/No'),
-                  value: 'Yes/No',
-                  groupValue: _responseType,
-                  onChanged: (value) {
-                    setState(() {
-                      _responseType = value;
-                      _errorMessage = null;
-                    });
-                  },
-                ),
-                RadioListTile<String>(
-                  title: const Text('1-10 Scale'),
-                  value: '1-10 Scale',
-                  groupValue: _responseType,
-                  onChanged: (value) {
-                    setState(() {
-                      _responseType = value;
-                      _errorMessage = null;
-                    });
-                  },
-                ),
-              ],
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(color: Colors.red, fontSize: 12.sp),
+                SizedBox(height: 10.h),
+                if (_responseRequired == 'Yes') ...[
+                  const Text(
+                    "Select Response Type:",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                ),
-              SizedBox(height: 10.h),
-              TextField(
-                controller: _daysController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: "Number of Days",
-                  labelStyle: TextStyles.font14Hint500Weight,
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.grey[400]!)),
-                  enabledBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black, width: 1.5),
-                  ),
-                  focusedBorder: const OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: ColorsManager.mainBlue, width: 2.0),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20.h),
-              _buildPromptRewardSection(
-                rewardName: 'streak',
-                enabled: _streakEnabled,
-                onEnabledChanged: (value) {
-                  setState(() {
-                    _streakEnabled = value;
-                  });
-                },
-                titleController: _streakTitleController,
-                operatorValue: _streakOperator,
-                onOperatorChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-
-                  setState(() {
-                    _streakOperator = value;
-                  });
-                },
-                numericThresholdController: _streakThresholdController,
-                yesNoThreshold: _streakYesNoThreshold,
-                onYesNoChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-
-                  setState(() {
-                    _streakYesNoThreshold = value;
-                  });
-                },
-              ),
-              _buildPromptRewardSection(
-                rewardName: 'token reward',
-                enabled: _tokenEnabled,
-                onEnabledChanged: (value) {
-                  setState(() {
-                    _tokenEnabled = value;
-                  });
-                },
-                titleController: _tokenTitleController,
-                operatorValue: _tokenOperator,
-                onOperatorChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-
-                  setState(() {
-                    _tokenOperator = value;
-                  });
-                },
-                numericThresholdController: _tokenThresholdController,
-                yesNoThreshold: _tokenYesNoThreshold,
-                onYesNoChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-
-                  setState(() {
-                    _tokenYesNoThreshold = value;
-                  });
-                },
-                quantityController: _tokenQuantityController,
-              ),
-              SizedBox(height: 20.h),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _addPrompt,
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 15.h),
-                    backgroundColor: ColorsManager.mainBlue,
-                  ),
-                  child: Text(
-                    isProvider ? "Save Prompt" : "Add Prompt",
-                    style: TextStyles.font14Hint500Weight
-                        .copyWith(color: Colors.white),
-                  ),
-                ),
-              ),
-              if (!isProvider) ...[
-                SizedBox(height: 20.h),
-                SizedBox(
-                  height: 200.h,
-                  child: ListView.builder(
-                    itemCount: prompts.length,
-                    itemBuilder: (context, index) {
-                      final prompt = prompts[index];
-                      return ListTile(
-                        title: Text(
-                            "${prompt.prompt} (${prompt.numberOfDays} day(s))"),
-                        subtitle: Text("Response: ${prompt.resReq}"),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.grey),
-                          onPressed: () {
-                            setState(() {
-                              prompts.removeAt(index);
-                            });
-                          },
-                        ),
-                      );
+                  RadioListTile<String>(
+                    title: const Text('Yes/No'),
+                    value: 'Yes/No',
+                    groupValue: _responseType,
+                    onChanged: (value) {
+                      setState(() {
+                        _responseType = value;
+                        _responseChanged = true;
+                        _errorMessage = null;
+                      });
                     },
                   ),
+                  RadioListTile<String>(
+                    title: const Text('1-10 Scale'),
+                    value: '1-10 Scale',
+                    groupValue: _responseType,
+                    onChanged: (value) {
+                      setState(() {
+                        _responseType = value;
+                        _responseChanged = true;
+                        _errorMessage = null;
+                      });
+                    },
+                  ),
+                ],
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.red, fontSize: 12.sp),
+                    ),
+                  ),
+                SizedBox(height: 10.h),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  key: const ValueKey('prompt-start'),
+                  title: const Text('Start Date'),
+                  subtitle: Text(MedicationSchedule.dateLabel(_startDate)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: _saving ? null : _pickStartDate,
                 ),
+                TextField(
+                  key: const ValueKey('prompt-days'),
+                  controller: _daysController,
+                  onChanged: (_) => setState(() {}),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: "Number of Days",
+                    helperText: PromptSchedule.dateRangeLabel(
+                        _startDate, int.tryParse(_daysController.text.trim())),
+                    helperMaxLines: 2,
+                    labelStyle: TextStyles.font14Hint500Weight,
+                    border: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[400]!)),
+                    enabledBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.black, width: 1.5),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide:
+                          BorderSide(color: ColorsManager.mainBlue, width: 2.0),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 20.h),
+                _buildPromptRewardSection(
+                  rewardName: 'streak',
+                  onThresholdChanged: () => _streakThresholdChanged = true,
+                  enabled: _streakEnabled,
+                  onEnabledChanged: (value) {
+                    setState(() {
+                      _streakEnabled = value;
+                    });
+                  },
+                  titleController: _streakTitleController,
+                  operatorValue: _streakOperator,
+                  onOperatorChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+
+                    setState(() {
+                      _streakOperator = value;
+                      _streakThresholdChanged = true;
+                    });
+                  },
+                  numericThresholdController: _streakThresholdController,
+                  yesNoThreshold: _streakYesNoThreshold,
+                  onYesNoChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+
+                    setState(() {
+                      _streakYesNoThreshold = value;
+                      _streakThresholdChanged = true;
+                    });
+                  },
+                ),
+                _buildPromptRewardSection(
+                  rewardName: 'token reward',
+                  onThresholdChanged: () => _tokenThresholdChanged = true,
+                  enabled: _tokenEnabled,
+                  onEnabledChanged: (value) {
+                    setState(() {
+                      _tokenEnabled = value;
+                    });
+                  },
+                  titleController: _tokenTitleController,
+                  operatorValue: _tokenOperator,
+                  onOperatorChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+
+                    setState(() {
+                      _tokenOperator = value;
+                      _tokenThresholdChanged = true;
+                    });
+                  },
+                  numericThresholdController: _tokenThresholdController,
+                  yesNoThreshold: _tokenYesNoThreshold,
+                  onYesNoChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+
+                    setState(() {
+                      _tokenYesNoThreshold = value;
+                      _tokenThresholdChanged = true;
+                    });
+                  },
+                  quantityController: _tokenQuantityController,
+                ),
+                SizedBox(height: 20.h),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    key: const ValueKey('prompt-save'),
+                    onPressed: _saving ? null : _addPrompt,
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 15.h),
+                      backgroundColor: ColorsManager.mainBlue,
+                    ),
+                    child: Text(
+                      _saving
+                          ? 'Saving...'
+                          : _editing
+                              ? 'Save Changes'
+                              : isProvider
+                                  ? 'Save Prompt'
+                                  : 'Add Prompt',
+                      style: TextStyles.font14Hint500Weight
+                          .copyWith(color: Colors.white),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'Dates are saved in the app. Bluetooth sends only prompts active '
+                    'today, with their remaining days. Reprogram NODE when a future '
+                    'prompt starts; editing the app does not update an offline device.',
+                  ),
+                ),
+                if (!isProvider && !_editing && !widget.returnResultOnly) ...[
+                  SizedBox(height: 20.h),
+                  SizedBox(
+                    height: 200.h,
+                    child: ListView.builder(
+                      itemCount: prompts.length,
+                      itemBuilder: (context, index) {
+                        final prompt = prompts[index];
+                        return ListTile(
+                          title: Text(
+                              "${prompt.prompt} (${prompt.numberOfDays} day(s))"),
+                          subtitle: Text(PromptSchedule.rangeLabel(prompt)),
+                          leading: const Icon(Icons.edit),
+                          onTap: () => _editDraft(index),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.grey),
+                            onPressed: () {
+                              setState(() {
+                                prompts.removeAt(index);
+                              });
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-      ),
-      bottomNavigationBar: isProvider
+      ), // AbsorbPointer
+      bottomNavigationBar: isProvider || _editing || widget.returnResultOnly
           ? null
           : Padding(
               padding: const EdgeInsets.all(16.0),
