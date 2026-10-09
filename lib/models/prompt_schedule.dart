@@ -107,4 +107,42 @@ class PromptSchedule {
     }
     return result;
   }
+
+  /// Prepare prompts for a date-aware NODE transfer.
+  ///
+  /// Active prompts are clipped to their remaining days. Future prompts keep
+  /// their saved start date and duration. Expired prompts are omitted.
+  static List<CounselingQuestion> forDeviceTransfer(
+    List<CounselingQuestion> prompts, {
+    required DateTime now,
+    DateTime? fallbackStartDate,
+  }) {
+    final today = MedicationSchedule.day(now);
+    final result = <CounselingQuestion>[];
+
+    for (final prompt in prompts) {
+      final dated = prompt.startDate != null
+          ? prompt
+          : prompt.copyWith(startDate: fallbackStartDate ?? now);
+      validateEntry(dated);
+
+      final first = start(dated);
+      final last = end(dated);
+      if (last.isBefore(today)) continue;
+
+      final transferStart = first.isBefore(today) ? today : first;
+      result.add(dated.copyWith(
+        startDate: DateTime(
+          transferStart.year,
+          transferStart.month,
+          transferStart.day,
+        ),
+        numberOfDays: last.difference(transferStart).inDays + 1,
+      ));
+    }
+
+    result.sort((a, b) => start(a).compareTo(start(b)));
+    return result;
+  }
+
 }

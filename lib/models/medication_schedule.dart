@@ -203,4 +203,57 @@ class MedicationSchedule {
       ),
     ];
   }
+
+  /// Build the single prescription that NODE can store.
+  ///
+  /// If a medication is active today, send only its remaining days beginning
+  /// today. Otherwise send the earliest future medication with its saved start
+  /// date and full duration. Expired entries are ignored.
+  static List<Medication> forDeviceTransfer(
+    List<Medication> medications, {
+    required DateTime now,
+    DateTime? fallbackStartDate,
+  }) {
+    final active = forLegacyTransfer(
+      medications,
+      now: now,
+      fallbackStartDate: fallbackStartDate,
+    );
+    if (active.isNotEmpty) return active;
+
+    final today = day(now);
+    final future = <Medication>[];
+
+    for (final medication in medications) {
+      final dated = medication.startDate != null
+          ? medication
+          : medication.copyWith(startDate: fallbackStartDate);
+
+      // Legacy entries with no usable date cannot be scheduled in the future.
+      if (dated.startDate == null) continue;
+
+      final first = start(dated);
+      if (!first.isAfter(today)) continue;
+
+      validateEntry(dated);
+      future.add(dated);
+    }
+
+    if (future.isEmpty) return const [];
+
+    future.sort((a, b) => start(a).compareTo(start(b)));
+    final medication = future.first;
+    final first = start(medication);
+    final timeMinutes = minutes(medication.times)!;
+
+    return [
+      medication.copyWith(
+        startDate: DateTime(first.year, first.month, first.day),
+        name: medication.name,
+        frequency: 'Once daily',
+        times: clock(timeMinutes ~/ 60, timeMinutes % 60),
+      ),
+    ];
+  }
+
 }

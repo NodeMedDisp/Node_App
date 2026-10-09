@@ -19,20 +19,19 @@ class RecoveryProgramFileFormatter {
     DateTime? fallbackStartDate,
   }) {
     final timestamp = generatedAt ?? DateTime.now();
-    final transferMedications = MedicationSchedule.forLegacyTransfer(
+    final transferMedications = MedicationSchedule.forDeviceTransfer(
       medications,
       now: timestamp,
       fallbackStartDate: fallbackStartDate,
     );
-    final transferPrompts = PromptSchedule.forLegacyTransfer(
+    final transferPrompts = PromptSchedule.forDeviceTransfer(
       prompts,
       now: timestamp,
       fallbackStartDate: fallbackStartDate,
     );
     if (transferMedications.isEmpty && transferPrompts.isEmpty) {
       throw const MedicationScheduleException(
-        'Nothing sent. There is no active medication or prompt today. '
-        'Future entries remain saved in the app.',
+        'Nothing sent. There is no active or future medication or prompt to send.',
       );
     }
     final buffer = StringBuffer();
@@ -44,6 +43,9 @@ class RecoveryProgramFileFormatter {
       buffer.writeln('Medication: ${medication.name}');
       buffer.writeln('Dose: ${medication.dose}');
       buffer.writeln('Frequency: ${medication.frequency}');
+      buffer.writeln(
+        'Start Date: ${MedicationSchedule.dateLabel(medication.startDate!)}',
+      );
       buffer.writeln('Times: ${medication.times}');
       buffer.writeln('Days: 1 to ${medication.numDays}');
 
@@ -72,6 +74,9 @@ class RecoveryProgramFileFormatter {
       buffer.writeln('Prompt: ${prompt.prompt}');
       buffer.writeln('Required Response: ${prompt.resReq}');
       buffer.writeln('Options: ${prompt.options.join(', ')}');
+      buffer.writeln(
+        'Start Date: ${MedicationSchedule.dateLabel(prompt.startDate!)}',
+      );
       buffer.writeln('Days: 1 to ${prompt.numberOfDays}');
 
       _appendRewardSection(
