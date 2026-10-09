@@ -1,0 +1,168 @@
+diff --git a/lib/models/medication_schedule.dart b/lib/models/medication_schedule.dart
+index b7bd7d8..96f5454 100644
+--- a/lib/models/medication_schedule.dart
++++ b/lib/models/medication_schedule.dart
+@@ -140,40 +140,58 @@ class MedicationSchedule {
+         !today.isAfter(end(medication, fallbackStartDate: fallbackStartDate));
+   }
+ 
+-  /// Compatibility guard, NOT a firmware upgrade.
+-  /// The existing text protocol has no absolute medication start date.
+-  /// Never silently send a future entry as though it starts today.
++  /// Build the medication portion of a legacy NODE transfer for [now].
++  ///
++  /// Schedule overlap enforcement happens when a medication is saved or edited.
++  /// Bluetooth should consume that already-validated schedule rather than reject a
++  /// transfer because of expired or future records that are not active today.
+   static List<Medication> forLegacyTransfer(
+     List<Medication> medications, {
+     required DateTime now,
+     DateTime? fallbackStartDate,
+   }) {
+-    validateProgram(medications, fallbackStartDate: fallbackStartDate);
+     final today = day(now);
+-    final pending = medications.where((medication) =>
+-        !end(medication, fallbackStartDate: fallbackStartDate).isBefore(today)).toList();
+-    if (pending.any((medication) =>
+-        start(medication, fallbackStartDate: fallbackStartDate).isAfter(today))) {
+-      throw const MedicationScheduleException(
+-        'Nothing sent. Future doses can be saved in the app, but the current NODE '
+-        'transfer format does not include a start date. Matching device firmware '
+-        'must be verified before sending a future or multi-period schedule.',
+-      );
+-    }
+-    if (pending.length > 1) {
+-      throw const MedicationScheduleException(
+-        'Nothing sent. The current NODE transfer supports only one active medication block.',
++    final activeToday = medications.where((medication) =>
++        isActive(
++          medication,
++          today,
++          fallbackStartDate: fallbackStartDate,
++        )).toList();
++
++    // Defensive only: save/update validation should prevent this. Keep the guard
++    // so corrupted or legacy data can never send two medications on one day.
++    if (activeToday.length > 1) {
++      throw MedicationScheduleException(
++        'More than one medication is scheduled for ${dateLabel(today)}. '
++        'Only one medication is allowed per day. Nothing was sent to NODE.',
+       );
+     }
+-    return pending.map((medication) => medication.copyWith(
+-      // Do not restart a partly completed course with its original full duration.
+-      numDays: end(medication, fallbackStartDate: fallbackStartDate)
+-          .difference(today).inDays + 1,
+-      startDate: DateTime(now.year, now.month, now.day),
+-      // Keep the saved name/type. Never substitute a different medication.
+-      name: medication.name,
+-      frequency: 'Once daily',
+-      times: clock(minutes(medication.times)! ~/ 60, minutes(medication.times)! % 60),
+-    )).toList();
++
++    if (activeToday.isEmpty) return const [];
++
++    final medication = activeToday.single;
++    final dated = medication.startDate != null
++        ? medication
++        : medication.copyWith(startDate: fallbackStartDate);
++
++    // Validate the record we are actually about to transmit, but do not re-check
++    // historical or future schedule overlaps during Bluetooth programming.
++    validateEntry(dated);
++
++    return [
++      medication.copyWith(
++        // Do not restart a partly completed course with its original full duration.
++        numDays: end(medication, fallbackStartDate: fallbackStartDate)
++            .difference(today).inDays + 1,
++        startDate: DateTime(now.year, now.month, now.day),
++        // Keep the saved name/type. Never substitute a different medication.
++        name: medication.name,
++        frequency: 'Once daily',
++        times: clock(
++          minutes(medication.times)! ~/ 60,
++          minutes(medication.times)! % 60,
++        ),
++      ),
++    ];
+   }
+ }
+diff --git a/test/node_med_prompt_schedule_test.dart b/test/node_med_prompt_schedule_test.dart
+index 7b517fb..784d6e9 100644
+--- a/test/node_med_prompt_schedule_test.dart
++++ b/test/node_med_prompt_schedule_test.dart
+@@ -100,9 +100,71 @@ void main() {
+     expect(original.startDate, DateTime(2026, 10, 6));
+   });
+ 
+-  test('future medication blocks are not silently sent as active today', () {
+-    expect(() => MedicationSchedule.forLegacyTransfer([
++  test('future medication is ignored until its scheduled day', () {
++    final result = MedicationSchedule.forLegacyTransfer([
+       medication(start: DateTime(2026, 10, 10)),
++    ], now: now);
++    expect(result, isEmpty);
++  });
++
++  test('expired historical overlap does not block todays medication', () {
++    final result = MedicationSchedule.forLegacyTransfer([
++      medication(
++        name: 'Old A',
++        start: DateTime(2026, 9, 24),
++        days: 3,
++      ),
++      medication(
++        name: 'Old B',
++        start: DateTime(2026, 9, 24),
++        days: 2,
++        time: '9:00 AM',
++      ),
++      medication(
++        name: 'Today',
++        start: DateTime(2026, 10, 7),
++        days: 5,
++      ),
++    ], now: now);
++
++    expect(result, hasLength(1));
++    expect(result.single.name, 'Today');
++    expect(result.single.startDate, DateTime(2026, 10, 7));
++    expect(result.single.numDays, 5);
++  });
++
++  test('future medication does not block an active medication', () {
++    final result = MedicationSchedule.forLegacyTransfer([
++      medication(
++        name: 'Active',
++        start: DateTime(2026, 10, 6),
++        days: 3,
++      ),
++      medication(
++        name: 'Future',
++        start: DateTime(2026, 10, 10),
++        days: 3,
++      ),
++    ], now: now);
++
++    expect(result, hasLength(1));
++    expect(result.single.name, 'Active');
++    expect(result.single.numDays, 2);
++  });
++
++  test('bluetooth keeps a defensive guard against two active medications', () {
++    expect(() => MedicationSchedule.forLegacyTransfer([
++      medication(
++        name: 'A',
++        start: DateTime(2026, 10, 7),
++        days: 2,
++      ),
++      medication(
++        name: 'B',
++        start: DateTime(2026, 10, 7),
++        days: 2,
++        time: '9:00 AM',
++      ),
+     ], now: now), throwsA(scheduleError));
+   });
+ 

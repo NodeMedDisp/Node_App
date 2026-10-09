@@ -25,6 +25,13 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
   final TextEditingController _medicationController = TextEditingController();
   final TextEditingController _doseController = TextEditingController();
   final TextEditingController _daysController = TextEditingController();
+  final TextEditingController _streakTitleController = TextEditingController();
+  final TextEditingController _tokenTitleController = TextEditingController();
+  final TextEditingController _tokenQuantityController =
+      TextEditingController(text: '1');
+
+  bool _streakEnabled = false;
+  bool _tokenEnabled = false;
 
   String? _frequency = 'Once daily';
   int _numTimesPerDay = 1;
@@ -40,14 +47,26 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
     _medicationController.text = original?.name ?? '';
     _doseController.text = original?.dose ?? '';
     _daysController.text = original?.numDays.toString() ?? '';
+
+    _streakEnabled = original?.streakEnabled ?? false;
+    _streakTitleController.text = original?.streakTitle ?? '';
+    _tokenEnabled = original?.tokenEnabled ?? false;
+    _tokenTitleController.text = original?.tokenTitle ?? '';
+    _tokenQuantityController.text =
+        original != null && original.tokenQuantity > 0
+            ? original.tokenQuantity.toString()
+            : '1';
+
     _startDate = DateUtils.dateOnly(
       original?.startDate ?? widget.fallbackStartDate ?? DateTime.now(),
     );
-    final minute = original == null ? null : MedicationSchedule.minutes(original.times);
+    final minute =
+        original == null ? null : MedicationSchedule.minutes(original.times);
     if (minute != null) {
       _selectedTimes = [TimeOfDay(hour: minute ~/ 60, minute: minute % 60)];
     } else if (original != null) {
-      _errorMessage = 'This entry needs one daily time. Select a single time before saving.';
+      _errorMessage =
+          'This entry needs one daily time. Select a single time before saving.';
     }
   }
 
@@ -56,7 +75,8 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
       context: context,
       initialDate: _startDate,
       firstDate: DateTime(_startDate.year < 2000 ? _startDate.year : 2000),
-      lastDate: DateTime(_startDate.year > 2100 ? _startDate.year : 2100, 12, 31),
+      lastDate:
+          DateTime(_startDate.year > 2100 ? _startDate.year : 2100, 12, 31),
     );
     if (!mounted || picked == null) return;
     setState(() => _startDate = DateUtils.dateOnly(picked));
@@ -65,22 +85,62 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
   void _save() {
     final chosen = _selectedTimes.single;
     final original = widget.medication;
+    final tokenQuantity = int.tryParse(_tokenQuantityController.text.trim());
+
+    if (_streakEnabled && _streakTitleController.text.trim().isEmpty) {
+      setState(
+          () => _errorMessage = 'Enter a title for the medication streak.');
+      return;
+    }
+
+    if (_tokenEnabled && _tokenTitleController.text.trim().isEmpty) {
+      setState(
+          () => _errorMessage = 'Enter a title for the medication tokens.');
+      return;
+    }
+
+    if (_tokenEnabled && (tokenQuantity == null || tokenQuantity <= 0)) {
+      setState(
+          () => _errorMessage = 'Enter a token quantity greater than zero.');
+      return;
+    }
+
     final values = Medication(
       name: _medicationController.text.trim(),
       dose: _doseController.text.trim(),
       frequency: 'Once daily',
-      times: chosen == null ? '' : MedicationSchedule.clock(chosen.hour, chosen.minute),
+      times: chosen == null
+          ? ''
+          : MedicationSchedule.clock(chosen.hour, chosen.minute),
       numDays: int.tryParse(_daysController.text.trim()) ?? 0,
       startDate: _startDate,
+      streakEnabled: _streakEnabled,
+      streakTitle: _streakTitleController.text.trim(),
+      streakThreshold: original?.streakThreshold ?? 'None',
+      tokenEnabled: _tokenEnabled,
+      tokenTitle: _tokenTitleController.text.trim(),
+      tokenThreshold: original?.tokenThreshold ?? 'None',
+      tokenQuantity: _tokenEnabled
+          ? tokenQuantity!
+          : (original?.tokenQuantity ?? tokenQuantity ?? 0),
     );
-    final updated = original == null ? values : original.copyWith(
-      name: values.name,
-      dose: values.dose,
-      frequency: values.frequency,
-      times: values.times,
-      numDays: values.numDays,
-      startDate: values.startDate,
-    );
+    final updated = original == null
+        ? values
+        : original.copyWith(
+            name: values.name,
+            dose: values.dose,
+            frequency: values.frequency,
+            times: values.times,
+            numDays: values.numDays,
+            startDate: values.startDate,
+            streakEnabled: values.streakEnabled,
+            streakTitle: values.streakTitle,
+            streakThreshold: values.streakThreshold,
+            tokenEnabled: values.tokenEnabled,
+            tokenTitle: values.tokenTitle,
+            tokenThreshold: values.tokenThreshold,
+            tokenQuantity: values.tokenQuantity,
+          );
     try {
       MedicationSchedule.validateCandidate(
         updated,
@@ -99,6 +159,9 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
     _medicationController.dispose();
     _doseController.dispose();
     _daysController.dispose();
+    _streakTitleController.dispose();
+    _tokenTitleController.dispose();
+    _tokenQuantityController.dispose();
     super.dispose();
   }
 
@@ -113,6 +176,70 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
         _selectedTimes[index] = picked;
       });
     }
+  }
+
+  Widget _buildMedicationRewardSection({
+    required String rewardName,
+    required bool enabled,
+    required ValueChanged<bool> onEnabledChanged,
+    required TextEditingController titleController,
+    TextEditingController? quantityController,
+  }) {
+    final isToken = quantityController != null;
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 16.h),
+      child: Padding(
+        padding: EdgeInsets.all(12.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'Add a $rewardName?',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              value: enabled,
+              onChanged: onEnabledChanged,
+            ),
+            if (enabled) ...[
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(
+                  labelText: isToken ? 'Token Title' : 'Streak Title',
+                  hintText: isToken
+                      ? 'Example: Medication Completed'
+                      : 'Example: Medication Streak',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              SizedBox(height: 12.h),
+              const InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Threshold',
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(
+                  'Medication taken - this threshold is fixed',
+                ),
+              ),
+              if (isToken) ...[
+                SizedBox(height: 12.h),
+                TextField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Number of Tokens',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -294,10 +421,29 @@ class _MedicationEntryPageState extends State<MedicationEntryPage> {
             ),
             SizedBox(height: 20.h),
 
+            _buildMedicationRewardSection(
+              rewardName: 'streak',
+              enabled: _streakEnabled,
+              onEnabledChanged: (value) {
+                setState(() => _streakEnabled = value);
+              },
+              titleController: _streakTitleController,
+            ),
+            _buildMedicationRewardSection(
+              rewardName: 'token reward',
+              enabled: _tokenEnabled,
+              onEnabledChanged: (value) {
+                setState(() => _tokenEnabled = value);
+              },
+              titleController: _tokenTitleController,
+              quantityController: _tokenQuantityController,
+            ),
+
             if (_errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                child: Text(_errorMessage!,
+                    style: const TextStyle(color: Colors.red)),
               ),
             // Save Button
             SizedBox(

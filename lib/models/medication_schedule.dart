@@ -40,16 +40,18 @@ class MedicationSchedule {
     }
     final first = start(medication, fallbackStartDate: fallbackStartDate);
     try {
-      return DateTime.utc(first.year, first.month, first.day + medication.numDays - 1);
+      return DateTime.utc(
+          first.year, first.month, first.day + medication.numDays - 1);
     } on ArgumentError {
-      throw const MedicationScheduleException('The number of days is too large.');
+      throw const MedicationScheduleException(
+          'The number of days is too large.');
     }
   }
 
   /// Accepts one 24-hour or English AM/PM time, never a list of times.
   static int? minutes(String value) {
-    final match = RegExp(r'^(\d{1,2}):(\d{2})\s*([aApP][mM])?$')
-        .firstMatch(value.trim());
+    final match =
+        RegExp(r'^(\d{1,2}):(\d{2})\s*([aApP][mM])?$').firstMatch(value.trim());
     if (match == null) return null;
     var hour = int.parse(match.group(1)!);
     final minute = int.parse(match.group(2)!);
@@ -77,8 +79,10 @@ class MedicationSchedule {
       );
     }
     if (medication.dose.trim().isEmpty ||
-        medication.dose.contains('\n') || medication.dose.contains('\r')) {
-      throw const MedicationScheduleException('Enter a medication dose on one line.');
+        medication.dose.contains('\n') ||
+        medication.dose.contains('\r')) {
+      throw const MedicationScheduleException(
+          'Enter a medication dose on one line.');
     }
     final frequency = medication.frequency.trim().toLowerCase();
     if ((frequency != 'once daily' && frequency != 'daily') ||
@@ -134,46 +138,69 @@ class MedicationSchedule {
     DateTime? fallbackStartDate,
   }) {
     if (medication.numDays <= 0 ||
-        (medication.startDate == null && fallbackStartDate == null)) return false;
+        (medication.startDate == null && fallbackStartDate == null))
+      return false;
     final today = day(onDay);
-    return !today.isBefore(start(medication, fallbackStartDate: fallbackStartDate)) &&
+    return !today.isBefore(
+            start(medication, fallbackStartDate: fallbackStartDate)) &&
         !today.isAfter(end(medication, fallbackStartDate: fallbackStartDate));
   }
 
-  /// Compatibility guard, NOT a firmware upgrade.
-  /// The existing text protocol has no absolute medication start date.
-  /// Never silently send a future entry as though it starts today.
+  /// Build the medication portion of a legacy NODE transfer for [now].
+  ///
+  /// Schedule overlap enforcement happens when a medication is saved or edited.
+  /// Bluetooth should consume that already-validated schedule rather than reject a
+  /// transfer because of expired or future records that are not active today.
   static List<Medication> forLegacyTransfer(
     List<Medication> medications, {
     required DateTime now,
     DateTime? fallbackStartDate,
   }) {
-    validateProgram(medications, fallbackStartDate: fallbackStartDate);
     final today = day(now);
-    final pending = medications.where((medication) =>
-        !end(medication, fallbackStartDate: fallbackStartDate).isBefore(today)).toList();
-    if (pending.any((medication) =>
-        start(medication, fallbackStartDate: fallbackStartDate).isAfter(today))) {
-      throw const MedicationScheduleException(
-        'Nothing sent. Future doses can be saved in the app, but the current NODE '
-        'transfer format does not include a start date. Matching device firmware '
-        'must be verified before sending a future or multi-period schedule.',
+    final activeToday = medications
+        .where((medication) => isActive(
+              medication,
+              today,
+              fallbackStartDate: fallbackStartDate,
+            ))
+        .toList();
+
+    // Defensive only: save/update validation should prevent this. Keep the guard
+    // so corrupted or legacy data can never send two medications on one day.
+    if (activeToday.length > 1) {
+      throw MedicationScheduleException(
+        'More than one medication is scheduled for ${dateLabel(today)}. '
+        'Only one medication is allowed per day. Nothing was sent to NODE.',
       );
     }
-    if (pending.length > 1) {
-      throw const MedicationScheduleException(
-        'Nothing sent. The current NODE transfer supports only one active medication block.',
-      );
-    }
-    return pending.map((medication) => medication.copyWith(
-      // Do not restart a partly completed course with its original full duration.
-      numDays: end(medication, fallbackStartDate: fallbackStartDate)
-          .difference(today).inDays + 1,
-      startDate: DateTime(now.year, now.month, now.day),
-      // Keep the saved name/type. Never substitute a different medication.
-      name: medication.name,
-      frequency: 'Once daily',
-      times: clock(minutes(medication.times)! ~/ 60, minutes(medication.times)! % 60),
-    )).toList();
+
+    if (activeToday.isEmpty) return const [];
+
+    final medication = activeToday.single;
+    final dated = medication.startDate != null
+        ? medication
+        : medication.copyWith(startDate: fallbackStartDate);
+
+    // Validate the record we are actually about to transmit, but do not re-check
+    // historical or future schedule overlaps during Bluetooth programming.
+    validateEntry(dated);
+
+    return [
+      medication.copyWith(
+        // Do not restart a partly completed course with its original full duration.
+        numDays: end(medication, fallbackStartDate: fallbackStartDate)
+                .difference(today)
+                .inDays +
+            1,
+        startDate: DateTime(now.year, now.month, now.day),
+        // Keep the saved name/type. Never substitute a different medication.
+        name: medication.name,
+        frequency: 'Once daily',
+        times: clock(
+          minutes(medication.times)! ~/ 60,
+          minutes(medication.times)! % 60,
+        ),
+      ),
+    ];
   }
 }
