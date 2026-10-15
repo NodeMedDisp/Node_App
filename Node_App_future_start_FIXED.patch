@@ -1,0 +1,261 @@
+diff --git a/lib/Bluetooth/recovery_program_file_formatter.dart b/lib/Bluetooth/recovery_program_file_formatter.dart
+index fad3a87..8abc453 100644
+--- a/lib/Bluetooth/recovery_program_file_formatter.dart
++++ b/lib/Bluetooth/recovery_program_file_formatter.dart
+@@ -19,20 +19,19 @@ class RecoveryProgramFileFormatter {
+     DateTime? fallbackStartDate,
+   }) {
+     final timestamp = generatedAt ?? DateTime.now();
+-    final transferMedications = MedicationSchedule.forLegacyTransfer(
++    final transferMedications = MedicationSchedule.forDeviceTransfer(
+       medications,
+       now: timestamp,
+       fallbackStartDate: fallbackStartDate,
+     );
+-    final transferPrompts = PromptSchedule.forLegacyTransfer(
++    final transferPrompts = PromptSchedule.forDeviceTransfer(
+       prompts,
+       now: timestamp,
+       fallbackStartDate: fallbackStartDate,
+     );
+     if (transferMedications.isEmpty && transferPrompts.isEmpty) {
+       throw const MedicationScheduleException(
+-        'Nothing sent. There is no active medication or prompt today. '
+-        'Future entries remain saved in the app.',
++        'Nothing sent. There is no active or future medication or prompt to send.',
+       );
+     }
+     final buffer = StringBuffer();
+@@ -44,6 +43,9 @@ class RecoveryProgramFileFormatter {
+       buffer.writeln('Medication: ${medication.name}');
+       buffer.writeln('Dose: ${medication.dose}');
+       buffer.writeln('Frequency: ${medication.frequency}');
++      buffer.writeln(
++        'Start Date: ${MedicationSchedule.dateLabel(medication.startDate!)}',
++      );
+       buffer.writeln('Times: ${medication.times}');
+       buffer.writeln('Days: 1 to ${medication.numDays}');
+ 
+@@ -72,6 +74,9 @@ class RecoveryProgramFileFormatter {
+       buffer.writeln('Prompt: ${prompt.prompt}');
+       buffer.writeln('Required Response: ${prompt.resReq}');
+       buffer.writeln('Options: ${prompt.options.join(', ')}');
++      buffer.writeln(
++        'Start Date: ${MedicationSchedule.dateLabel(prompt.startDate!)}',
++      );
+       buffer.writeln('Days: 1 to ${prompt.numberOfDays}');
+ 
+       _appendRewardSection(
+diff --git a/lib/models/medication_schedule.dart b/lib/models/medication_schedule.dart
+index 89223a2..ea166bc 100644
+--- a/lib/models/medication_schedule.dart
++++ b/lib/models/medication_schedule.dart
+@@ -203,4 +203,57 @@ class MedicationSchedule {
+       ),
+     ];
+   }
++
++  /// Build the single prescription that NODE can store.
++  ///
++  /// If a medication is active today, send only its remaining days beginning
++  /// today. Otherwise send the earliest future medication with its saved start
++  /// date and full duration. Expired entries are ignored.
++  static List<Medication> forDeviceTransfer(
++    List<Medication> medications, {
++    required DateTime now,
++    DateTime? fallbackStartDate,
++  }) {
++    final active = forLegacyTransfer(
++      medications,
++      now: now,
++      fallbackStartDate: fallbackStartDate,
++    );
++    if (active.isNotEmpty) return active;
++
++    final today = day(now);
++    final future = <Medication>[];
++
++    for (final medication in medications) {
++      final dated = medication.startDate != null
++          ? medication
++          : medication.copyWith(startDate: fallbackStartDate);
++
++      // Legacy entries with no usable date cannot be scheduled in the future.
++      if (dated.startDate == null) continue;
++
++      final first = start(dated);
++      if (!first.isAfter(today)) continue;
++
++      validateEntry(dated);
++      future.add(dated);
++    }
++
++    if (future.isEmpty) return const [];
++
++    future.sort((a, b) => start(a).compareTo(start(b)));
++    final medication = future.first;
++    final first = start(medication);
++    final timeMinutes = minutes(medication.times)!;
++
++    return [
++      medication.copyWith(
++        startDate: DateTime(first.year, first.month, first.day),
++        name: medication.name,
++        frequency: 'Once daily',
++        times: clock(timeMinutes ~/ 60, timeMinutes % 60),
++      ),
++    ];
++  }
++
+ }
+diff --git a/lib/models/prompt_schedule.dart b/lib/models/prompt_schedule.dart
+index f20b7ec..37850d2 100644
+--- a/lib/models/prompt_schedule.dart
++++ b/lib/models/prompt_schedule.dart
+@@ -107,4 +107,42 @@ class PromptSchedule {
+     }
+     return result;
+   }
++
++  /// Prepare prompts for a date-aware NODE transfer.
++  ///
++  /// Active prompts are clipped to their remaining days. Future prompts keep
++  /// their saved start date and duration. Expired prompts are omitted.
++  static List<CounselingQuestion> forDeviceTransfer(
++    List<CounselingQuestion> prompts, {
++    required DateTime now,
++    DateTime? fallbackStartDate,
++  }) {
++    final today = MedicationSchedule.day(now);
++    final result = <CounselingQuestion>[];
++
++    for (final prompt in prompts) {
++      final dated = prompt.startDate != null
++          ? prompt
++          : prompt.copyWith(startDate: fallbackStartDate ?? now);
++      validateEntry(dated);
++
++      final first = start(dated);
++      final last = end(dated);
++      if (last.isBefore(today)) continue;
++
++      final transferStart = first.isBefore(today) ? today : first;
++      result.add(dated.copyWith(
++        startDate: DateTime(
++          transferStart.year,
++          transferStart.month,
++          transferStart.day,
++        ),
++        numberOfDays: last.difference(transferStart).inDays + 1,
++      ));
++    }
++
++    result.sort((a, b) => start(a).compareTo(start(b)));
++    return result;
++  }
++
+ }
+diff --git a/test/node_future_device_program_test.dart b/test/node_future_device_program_test.dart
+new file mode 100644
+index 0000000..9f8a63f
+--- /dev/null
++++ b/test/node_future_device_program_test.dart
+@@ -0,0 +1,98 @@
++import 'package:flutter_test/flutter_test.dart';
++import '../lib/Bluetooth/recovery_program_file_formatter.dart';
++import '../lib/models/counseling_question.dart';
++import '../lib/models/medication.dart';
++import '../lib/models/medication_schedule.dart';
++import '../lib/models/prompt_schedule.dart';
++
++Medication medication({
++  required String name,
++  required DateTime start,
++  int days = 3,
++  String time = '8:00 AM',
++}) =>
++    Medication(
++      id: name,
++      name: name,
++      dose: '1 test unit',
++      frequency: 'Once daily',
++      times: time,
++      numDays: days,
++      startDate: start,
++    );
++
++CounselingQuestion prompt({
++  required String text,
++  required DateTime start,
++  int days = 3,
++}) =>
++    CounselingQuestion(
++      id: text,
++      prompt: text,
++      resReq: 'Yes',
++      options: const ['Yes', 'No'],
++      numberOfDays: days,
++      startDate: start,
++    );
++
++void main() {
++  final now = DateTime(2026, 10, 7, 12);
++
++  test('device transfer selects the earliest future medication', () {
++    final sent = MedicationSchedule.forDeviceTransfer([
++      medication(name: 'Expired', start: DateTime(2026, 10, 1), days: 2),
++      medication(name: 'Future', start: DateTime(2026, 10, 10), days: 3),
++      medication(name: 'Later', start: DateTime(2026, 10, 20), days: 5),
++    ], now: now);
++
++    expect(sent, hasLength(1));
++    expect(sent.single.name, 'Future');
++    expect(sent.single.startDate, DateTime(2026, 10, 10));
++    expect(sent.single.numDays, 3);
++  });
++
++  test('active medication still sends only its remaining days', () {
++    final sent = MedicationSchedule.forDeviceTransfer([
++      medication(name: 'Active', start: DateTime(2026, 10, 6), days: 3),
++      medication(name: 'Future', start: DateTime(2026, 10, 20), days: 3),
++    ], now: now);
++
++    expect(sent, hasLength(1));
++    expect(sent.single.name, 'Active');
++    expect(sent.single.startDate, DateTime(2026, 10, 7));
++    expect(sent.single.numDays, 2);
++  });
++
++  test('device prompt transfer keeps future prompts and clips active prompts', () {
++    final sent = PromptSchedule.forDeviceTransfer([
++      prompt(text: 'Expired', start: DateTime(2026, 10, 1), days: 2),
++      prompt(text: 'Active', start: DateTime(2026, 10, 6), days: 3),
++      prompt(text: 'Future', start: DateTime(2026, 10, 10), days: 2),
++    ], now: now);
++
++    expect(sent.map((value) => value.prompt), ['Active', 'Future']);
++    expect(sent[0].startDate, DateTime(2026, 10, 7));
++    expect(sent[0].numberOfDays, 2);
++    expect(sent[1].startDate, DateTime(2026, 10, 10));
++    expect(sent[1].numberOfDays, 2);
++  });
++
++  test('formatter sends explicit future start dates to NODE', () {
++    final wire = RecoveryProgramFileFormatter.build(
++      medications: [
++        medication(name: 'Future', start: DateTime(2026, 10, 10), days: 3),
++      ],
++      prompts: [
++        prompt(text: 'Future prompt', start: DateTime(2026, 10, 11), days: 2),
++      ],
++      generatedAt: now,
++    );
++
++    expect(wire, contains('Medication: Future\n'));
++    expect(wire, contains('Start Date: 2026-10-10\n'));
++    expect(wire, contains('Prompt: Future prompt\n'));
++    expect(wire, contains('Start Date: 2026-10-11\n'));
++    expect(wire, contains('Days: 1 to 3\n'));
++    expect(wire, contains('Days: 1 to 2\n'));
++  });
++}

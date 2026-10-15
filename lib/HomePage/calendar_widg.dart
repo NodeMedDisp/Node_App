@@ -9,8 +9,8 @@ import '../GetStarted/enter_counseling_data.dart';
 import '../GetStarted/enter_medication_data.dart';
 import '../GetStarted/get_started.dart';
 import '../LoginComp/logic/provider/provider_cubit.dart';
-import '/../../LoginComp/theming/styles.dart';
-import '/../../LoginComp/theming/colors.dart';
+import '../LoginComp/theming/styles.dart';
+import '../LoginComp/theming/colors.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -29,6 +29,7 @@ class CalendarWidget extends StatefulWidget {
   /// Identifies whose data is currently being displayed.
   /// For provider mode this is the selected Firestore patient ID.
   final String? dataOwnerId;
+  final int bluetoothRefreshToken;
 
   const CalendarWidget({
     super.key,
@@ -38,6 +39,7 @@ class CalendarWidget extends StatefulWidget {
     this.externalFocusDay,
     this.externalRecoveryProgress,
     this.dataOwnerId,
+    this.bluetoothRefreshToken = 0,
   });
 
   @override
@@ -241,10 +243,12 @@ class CalendarWidgetState extends State<CalendarWidget> {
   void didUpdateWidget(covariant CalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final patientChanged = oldWidget.dataOwnerId != widget.dataOwnerId;
+    final patientChanged =
+        oldWidget.dataOwnerId != widget.dataOwnerId;
 
     final recoveryChanged =
-        oldWidget.externalRecoveryProgress != widget.externalRecoveryProgress;
+        oldWidget.externalRecoveryProgress !=
+            widget.externalRecoveryProgress;
 
     if (patientChanged) {
       debugPrint(
@@ -252,7 +256,8 @@ class CalendarWidgetState extends State<CalendarWidget> {
         '${oldWidget.dataOwnerId} -> ${widget.dataOwnerId}',
       );
 
-      _focusedDay = widget.externalFocusDay ?? widget.StartDate;
+      _focusedDay =
+          widget.externalFocusDay ?? widget.StartDate;
 
       _selectedDay = _focusedDay;
 
@@ -356,23 +361,81 @@ class CalendarWidgetState extends State<CalendarWidget> {
   }
 
   Future<void> _saveRecoveryProgress(
-      DateTime date, List<Map<String, dynamic>> progress) async {
+    DateTime date,
+    List<Map<String, dynamic>> progress,
+  ) async {
     final box = Hive.box<Map>('calendarData');
-    final formattedDate =
-        DateTime(date.year, date.month, date.day).toIso8601String();
-    final uniqueProgress = progress.toSet().toList();
-    box.put(formattedDate, {'progress': uniqueProgress});
+
+    final formattedDate = DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).toIso8601String();
+
+    final progressToSave =
+        progress.map((entry) {
+      return Map<String, dynamic>.from(entry);
+    }).toList();
+
+    await box.put(
+      formattedDate,
+      {
+        'progress': progressToSave,
+      },
+    );
   }
 
   void _loadRecoveryProgress() {
     final box = Hive.box<Map>('calendarData');
-    final keys = box.keys;
-    for (final key in keys) {
-      final data = box.get(key);
-      if (data != null && data['progress'] != null) {
-        final date = DateTime.parse(key as String);
-        recoveryProgress[date] =
-            List<Map<String, dynamic>>.from(data['progress']);
+
+    for (final key in box.keys) {
+      try {
+        final data = box.get(key);
+
+        if (data == null || data['progress'] == null) {
+          continue;
+        }
+
+        final date = DateTime.parse(
+          key.toString(),
+        );
+
+        final rawProgress = data['progress'];
+
+        if (rawProgress is! List) {
+          debugPrint(
+            'CALENDAR: Ignoring invalid Hive progress '
+            'for key=$key',
+          );
+          continue;
+        }
+
+        final progress =
+            rawProgress.map<Map<String, dynamic>>(
+          (entry) {
+            if (entry is Map) {
+              return Map<String, dynamic>.from(
+                entry,
+              );
+            }
+
+            return <String, dynamic>{};
+          },
+        ).where(
+          (entry) => entry.isNotEmpty,
+        ).toList();
+
+        recoveryProgress[date] = progress;
+
+        debugPrint(
+          'CALENDAR: Loaded local recovery '
+          'date=$date entries=${progress.length}',
+        );
+      } catch (error) {
+        debugPrint(
+          'CALENDAR: Could not load Hive recovery '
+          'key=$key error=$error',
+        );
       }
     }
   }
@@ -384,7 +447,8 @@ class CalendarWidgetState extends State<CalendarWidget> {
         if (characteristic.properties.notify) {
           await characteristic.setNotifyValue(true);
           await _bleValueSubscription?.cancel();
-          _bleValueSubscription = characteristic.lastValueStream.listen(
+          _bleValueSubscription =
+              characteristic.lastValueStream.listen(
             (data) {
               _handleFileData(data);
             },
@@ -467,7 +531,8 @@ class CalendarWidgetState extends State<CalendarWidget> {
 
           // Provider mode: also save to Firestore.
           try {
-            final providerCubit = context.read<ProviderCubit>();
+            final providerCubit =
+                context.read<ProviderCubit>();
 
             if (providerCubit.state.selectedUser != null) {
               providerCubit.saveRecoveryProgress(

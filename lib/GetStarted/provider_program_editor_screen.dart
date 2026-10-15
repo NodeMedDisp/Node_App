@@ -5,6 +5,9 @@ import '../LoginComp/core/widgets/MedicationEntryPage.dart';
 import '../LoginComp/logic/provider/provider_cubit.dart';
 import '../LoginComp/logic/provider/provider_state.dart';
 import '../models/medication.dart';
+import '../models/medication_schedule.dart';
+import '../models/counseling_question.dart';
+import '../models/prompt_schedule.dart';
 import 'enter_counseling_data.dart';
 import 'enter_medication_data.dart';
 
@@ -110,44 +113,62 @@ class _MedicationList extends StatelessWidget {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final medication = state.selectedMedications[index];
+                    final startDate = medication.startDate ?? state.selectedUser?.startDate;
 
                     return ListTile(
+                      key: medication.id == null ? null : ValueKey(medication.id),
                       title: Text(medication.name),
                       subtitle: Text(
-                        '${medication.dose} • '
-                        '${medication.frequency} • '
-                        '${medication.times}',
+                        '${medication.dose} | ${medication.times}\n'
+                        'Start: ${startDate == null ? 'Not set' : MedicationSchedule.dateLabel(startDate)}'
+                        ' | ${medication.numDays} days',
                       ),
-                      onTap: () async {
+                      onTap: state.saving ? null : () async {
+                        final patientId = state.selectedUser?.id;
                         final updated = await Navigator.push<Medication>(
                           context,
                           MaterialPageRoute(
                             builder: (_) => MedicationEntryPage(
                               medication: medication,
+                              otherMedications: [
+                                for (var i = 0; i < state.selectedMedications.length; i++)
+                                  if (i != index) state.selectedMedications[i],
+                              ],
+                              fallbackStartDate: state.selectedUser?.startDate,
                             ),
                           ),
                         );
-
-                        if (updated == null) {
+                        if (!context.mounted || updated == null) return;
+                        if (cubit.state.selectedUser?.id != patientId) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('The selected patient changed. Nothing was saved.'),
+                          ));
                           return;
                         }
-
-                        await cubit.updateMedicationForSelectedUser(
-                          updated.copyWith(
-                            id: medication.id,
-                          ),
-                        );
+                        try {
+                          await cubit.updateMedicationForSelectedUser(
+                            updated.copyWith(id: medication.id),
+                          );
+                        } catch (error) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('Could not save medication: $error'),
+                          ));
+                        }
                       },
                       trailing: IconButton(
-                        icon: const Icon(
-                          Icons.delete,
-                        ),
-                        onPressed: medication.id == null
+                        icon: const Icon(Icons.delete),
+                        onPressed: medication.id == null || state.saving
                             ? null
                             : () async {
-                                await cubit.deleteMedicationFromSelectedUser(
-                                  medication.id!,
-                                );
+                                try {
+                                  await cubit.deleteMedicationFromSelectedUser(medication.id!);
+                                } catch (error) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text('Could not delete medication: $error'),
+                                  ));
+                                }
                               },
                       ),
                     );
@@ -162,14 +183,29 @@ class _MedicationList extends StatelessWidget {
 class _PromptList extends StatelessWidget {
   final ProviderState state;
 
-  const _PromptList({
-    required this.state,
-  });
+  const _PromptList({required this.state});
+
+  void _openForm(BuildContext context, [CounselingQuestion? prompt]) {
+    final cubit = context.read<ProviderCubit>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: cubit,
+          child: EnterCounselingPrompts(
+            medications: state.selectedMedications,
+            initialPrompt: prompt,
+            // Existing legacy records use the patient's start, not today's date.
+            fallbackStartDate: prompt == null ? null : state.selectedUser?.startDate,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderCubit>();
-
     return Column(
       children: [
         Padding(
@@ -179,52 +215,50 @@ class _PromptList extends StatelessWidget {
             child: ElevatedButton.icon(
               icon: const Icon(Icons.add),
               label: const Text('Add Counseling Question'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => BlocProvider.value(
-                      value: cubit,
-                      child: EnterCounselingPrompts(
-                        medications: state.selectedMedications,
-                      ),
-                    ),
-                  ),
-                );
-              },
+              onPressed: state.saving ? null : () => _openForm(context),
             ),
           ),
         ),
         Expanded(
           child: state.selectedPrompts.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No counseling questions are configured.',
-                  ),
-                )
+              ? const Center(child: Text('No counseling questions are configured.'))
               : ListView.separated(
                   itemCount: state.selectedPrompts.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final prompt = state.selectedPrompts[index];
-
+                    final canEdit = prompt.id != null && !state.saving;
                     return ListTile(
+                      key: prompt.id == null ? null : ValueKey('prompt-${prompt.id}'),
                       title: Text(prompt.prompt),
                       subtitle: Text(
-                        '${prompt.resReq} • '
-                        '${prompt.numberOfDays} days',
+                        '${prompt.resReq}\n${PromptSchedule.rangeLabel(
+                          prompt, fallbackStartDate: state.selectedUser?.startDate)}',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.delete,
-                        ),
-                        onPressed: prompt.id == null
-                            ? null
-                            : () async {
-                                await cubit.deletePromptFromSelectedUser(
-                                  prompt.id!,
-                                );
-                              },
+                      onTap: canEdit ? () => _openForm(context, prompt) : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Edit prompt',
+                            icon: const Icon(Icons.edit),
+                            onPressed: canEdit ? () => _openForm(context, prompt) : null,
+                          ),
+                          IconButton(
+                            tooltip: 'Delete prompt',
+                            icon: const Icon(Icons.delete),
+                            onPressed: !canEdit ? null : () async {
+                              try {
+                                await cubit.deletePromptFromSelectedUser(prompt.id!);
+                              } catch (error) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text('Could not delete prompt: $error'),
+                                ));
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },

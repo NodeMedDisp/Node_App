@@ -1,5 +1,7 @@
 import '../models/counseling_question.dart';
 import '../models/medication.dart';
+import '../models/medication_schedule.dart';
+import '../models/prompt_schedule.dart';
 
 /// Generates the exact configuration-file format understood by NODE.
 ///
@@ -14,17 +16,36 @@ class RecoveryProgramFileFormatter {
     required List<Medication> medications,
     required List<CounselingQuestion> prompts,
     DateTime? generatedAt,
+    DateTime? fallbackStartDate,
   }) {
     final timestamp = generatedAt ?? DateTime.now();
+    final transferMedications = MedicationSchedule.forDeviceTransfer(
+      medications,
+      now: timestamp,
+      fallbackStartDate: fallbackStartDate,
+    );
+    final transferPrompts = PromptSchedule.forDeviceTransfer(
+      prompts,
+      now: timestamp,
+      fallbackStartDate: fallbackStartDate,
+    );
+    if (transferMedications.isEmpty && transferPrompts.isEmpty) {
+      throw const MedicationScheduleException(
+        'Nothing sent. There is no active or future medication or prompt to send.',
+      );
+    }
     final buffer = StringBuffer();
 
     buffer.writeln('Current Time: ${_formatDateTime(timestamp)}');
     buffer.writeln();
 
-    for (final medication in medications) {
+    for (final medication in transferMedications) {
       buffer.writeln('Medication: ${medication.name}');
       buffer.writeln('Dose: ${medication.dose}');
       buffer.writeln('Frequency: ${medication.frequency}');
+      buffer.writeln(
+        'Start Date: ${MedicationSchedule.dateLabel(medication.startDate!)}',
+      );
       buffer.writeln('Times: ${medication.times}');
       buffer.writeln('Days: 1 to ${medication.numDays}');
 
@@ -49,10 +70,13 @@ class RecoveryProgramFileFormatter {
       buffer.writeln();
     }
 
-    for (final prompt in prompts) {
+    for (final prompt in transferPrompts) {
       buffer.writeln('Prompt: ${prompt.prompt}');
       buffer.writeln('Required Response: ${prompt.resReq}');
       buffer.writeln('Options: ${prompt.options.join(', ')}');
+      buffer.writeln(
+        'Start Date: ${MedicationSchedule.dateLabel(prompt.startDate!)}',
+      );
       buffer.writeln('Days: 1 to ${prompt.numberOfDays}');
 
       _appendRewardSection(

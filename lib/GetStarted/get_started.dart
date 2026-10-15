@@ -7,15 +7,20 @@ import '../LoginComp/theming/styles.dart';
 import '../Helpers/rive_controller.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter/services.dart';
+import '../models/medication.dart';
 
 class GetStartedPage extends StatefulWidget {
   final BluetoothDevice? device;
   final bool isMockDevice;
+  final List<Medication> existingMedications;
+  final DateTime? fallbackStartDate;
 
   const GetStartedPage({
     super.key,
     this.device,
     this.isMockDevice = false,
+    this.existingMedications = const [],
+    this.fallbackStartDate,
   });
 
   @override
@@ -30,7 +35,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
   void initState() {
     super.initState();
     riveHelper.loadRiveFile('assets/animations/char1.riv').then((_) {
-      setState(() {});
+      if (mounted) setState(() {});
     });
   }
 
@@ -42,13 +47,18 @@ class _GetStartedPageState extends State<GetStartedPage> {
     _triggerRiveJumpAnimation();
 
     Future.delayed(const Duration(milliseconds: 1000), () {
+      if (!mounted) return;
       debugPrint(
         'TRACE 2 GET STARTED -> PRESCRIPTION: ${widget.device?.remoteId}',
       );
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => EnterPrescriptionData(device: widget.device),
+          builder: (context) => EnterPrescriptionData(
+            device: widget.device,
+            existingMedications: widget.existingMedications,
+            fallbackStartDate: widget.fallbackStartDate,
+          ),
         ),
       );
     });
@@ -125,9 +135,11 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const GetStartedPage(
+                            builder: (_) => GetStartedPage(
                               device: null,
                               isMockDevice: true,
+                              existingMedications: widget.existingMedications,
+                              fallbackStartDate: widget.fallbackStartDate,
                             ),
                           ),
                         );

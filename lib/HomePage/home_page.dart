@@ -3,15 +3,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // Bluetooth library
 import '../GetStarted/get_started.dart';
-import '/../LoginComp/logic/cubit/auth_cubit.dart'; // Import your AuthCubit
-import '/../LoginComp/screens/login/ui/login_screen.dart'; // Import your LoginScreen
-import '/HomePage/calendar_widg.dart'; // Import your CalendarWidget
-import '/../Bluetooth/bluetooth_trial.dart'; // Import the Bluetooth Setup Screen
+import '../LoginComp/logic/cubit/auth_cubit.dart'; // Import your AuthCubit
+import '../LoginComp/screens/login/ui/login_screen.dart'; // Import your LoginScreen
+import 'calendar_widg.dart'; // Import your CalendarWidget
+import '../Bluetooth/bluetooth_trial.dart'; // Import the Bluetooth Setup Screen
 import '../models/medication.dart';
 import '../models/counseling_question.dart';
 import '../GetStarted/enter_medication_data.dart';
 import '../GetStarted/counseling_questions_screen.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class HomePage extends StatefulWidget {
   final List<CounselingQuestion> prompts;
@@ -137,41 +136,31 @@ class _HomePageState extends State<HomePage> {
   }
 
   // Bluetooth pairing pop-up dialog
-  void _showBluetoothDialog() {
-    showDialog(
+  Future<void> _showBluetoothDialog() async {
+    if (!mounted) return;
+    final pair = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Welcome to NODE Recovery!!!'),
-          content: const Text('Pair a device to configure or view data.'),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                Navigator.of(context).pop(); // Close the dialog first
-
-                final device = await Navigator.push<BluetoothDevice>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const BLEScannerWidget(),
-                  ),
-                );
-
-                if (device != null) {
-                  setState(() {
-                    selectedBluetoothDevice = device;
-                    isBluetoothConnected = true;
-                  });
-
-                  debugPrint(
-                      "DEBUG: HomePage stored BLE device: ${device.remoteId}");
-                }
-              },
-              child: const Text('Pair Device'),
-            ),
-          ],
-        );
-      },
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Welcome to NODE Recovery!!!'),
+        content: const Text('Pair a device to configure or view data.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Pair Device'),
+          ),
+        ],
+      ),
     );
+    if (!mounted || pair != true) return;
+    final device = await Navigator.push<BluetoothDevice>(
+      context,
+      MaterialPageRoute(builder: (_) => const BLEScannerWidget()),
+    );
+    if (!mounted || device == null) return;
+    setState(() {
+      selectedBluetoothDevice = device;
+      isBluetoothConnected = true;
+    });
   }
 
   @override
@@ -273,6 +262,8 @@ class _HomePageState extends State<HomePage> {
                       MaterialPageRoute(
                         builder: (_) => GetStartedPage(
                           device: device,
+                          existingMedications: widget.medications,
+                          fallbackStartDate: _focusedDay,
                         ),
                       ),
                     );

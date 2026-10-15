@@ -7,8 +7,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'enter_counseling_data.dart';
 import 'custom_plan_screen.dart';
 import 'summary_screen.dart';
-import '/../../LoginComp/theming/styles.dart';
-import '/../../LoginComp/theming/colors.dart';
+import '../LoginComp/theming/styles.dart';
+import '../LoginComp/theming/colors.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // Import FlutterBluePlus
 import '../models/medication.dart';
 import '../models/counseling_question.dart';
