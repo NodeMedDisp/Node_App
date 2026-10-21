@@ -14,6 +14,7 @@ import '../models/prompt_schedule.dart';
 import 'provider_program_editor_screen.dart';
 import '../Bluetooth/node_ble_file_transfer_service.dart';
 import '../Bluetooth/recovery_program_file_formatter.dart';
+import 'provider_patient_invite_button.dart';
 
 class ProviderMainScreen extends StatefulWidget {
   final String? clinicCode;
@@ -212,7 +213,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
       fallbackStartDate: fallbackStartDate,
     );
   }
-  
+
   Future<void> _sendSelectedPatientProgram(
     BluetoothDevice device,
   ) async {
@@ -233,8 +234,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
 
     final today = DateTime.now();
 
-    final patientStartDate =
-        selectedPatient.startDate ?? today;
+    final patientStartDate = selectedPatient.startDate ?? today;
 
     final activePrompts = state.selectedPrompts.where(
       (prompt) {
@@ -261,8 +261,7 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
       );
     }
 
-    if (state.selectedMedications.isEmpty &&
-        activePrompts.isEmpty) {
+    if (state.selectedMedications.isEmpty && activePrompts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -282,7 +281,8 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
         fallbackStartDate: patientStartDate,
       );
     } on MedicationScheduleException catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
       return;
     }
 
@@ -357,18 +357,20 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
             color: FlutterBluePlus.connectedDevices.isNotEmpty
                 ? Colors.blue
                 : Colors.grey,
-            onPressed: _sending ? null : () async {
-              final connectedDevices = FlutterBluePlus.connectedDevices;
+            onPressed: _sending
+                ? null
+                : () async {
+                    final connectedDevices = FlutterBluePlus.connectedDevices;
 
-              if (connectedDevices.isEmpty) {
-                _showBluetoothDialog();
-                return;
-              }
+                    if (connectedDevices.isEmpty) {
+                      _showBluetoothDialog();
+                      return;
+                    }
 
-              await _sendSelectedPatientProgram(
-                connectedDevices.first,
-              );
-            },
+                    await _sendSelectedPatientProgram(
+                      connectedDevices.first,
+                    );
+                  },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -531,6 +533,18 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                   ],
                 ),
 
+                if (selectedUser != null) ...[
+                  SizedBox(height: 8.h),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ProviderPatientInviteButton(
+                      clinicId: widget.clinicCode ?? 'demo-clinic',
+                      patientId: selectedUser.id,
+                      patientDisplayName: selectedUser.displayName,
+                    ),
+                  ),
+                ],
+
                 SizedBox(height: 16.h),
 
                 // ---------------------------------------------------------
@@ -547,7 +561,8 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                           ),
                         )
                       : CalendarWidget(
-                          key: ValueKey('provider:${widget.clinicCode}:${selectedUser.id}'),
+                          key: ValueKey(
+                              'provider:${widget.clinicCode}:${selectedUser.id}'),
                           bluetoothRefreshToken: _calendarRefreshToken,
                           dataOwnerId: selectedUser.id,
                           prompts: state.selectedPrompts,
@@ -555,6 +570,16 @@ class _ProviderMainScreenState extends State<ProviderMainScreen> {
                           StartDate: selectedUser.startDate ?? DateTime.now(),
                           externalFocusDay: selectedUser.latestEntryDate,
                           externalRecoveryProgress: state.recoveryMap,
+                          useLocalRecoveryCache: false,
+                          showProgramActions: false,
+                          onRecoveryProgressReceived: (date, entries) {
+                            return context
+                                .read<ProviderCubit>()
+                                .saveRecoveryProgress(
+                                  date: date,
+                                  entries: entries,
+                                );
+                          },
                         ),
                 ),
               ],

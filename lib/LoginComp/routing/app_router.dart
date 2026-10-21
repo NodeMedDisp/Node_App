@@ -1,24 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../Bluetooth/moc_ble_scanner_widget.dart';
 import '../../Bluetooth/mock_ble_scanner_screen.dart';
-import '../logic/provider/provider_cubit.dart';
-import '/GetStarted/provider_main_screen.dart';
-import '/HomePage/home_page.dart';
-import '../../models/medication.dart';
-import '../../models/counseling_question.dart';
+import '../../GetStarted/provider_main_screen.dart';
+import '../../HomePage/home_page.dart';
+import '../../Patient/patient_cubit.dart';
+import '../../Patient/patient_repository.dart';
+import '../data/firestore_provider_repository.dart';
 import '../logic/cubit/auth_cubit.dart';
+import '../logic/provider/provider_cubit.dart';
 import '../screens/create_password/ui/create_password.dart';
 import '../screens/forget/ui/forget_screen.dart';
 import '../screens/login/ui/login_screen.dart';
 import '../screens/signup/ui/sign_up_sceen.dart';
-import '../data/firestore_provider_repository.dart';
 import 'routes.dart';
 
 class AppRouter {
+  final String? savedClinicCode;
   late AuthCubit authCubit;
 
-  AppRouter() {
+  AppRouter({this.savedClinicCode}) {
     authCubit = AuthCubit();
   }
 
@@ -33,14 +35,17 @@ class AppRouter {
         );
 
       case Routes.homeScreen:
-        final args = settings.arguments as Map<String, dynamic>?;
         return MaterialPageRoute(
-          builder: (_) => BlocProvider.value(
-            value: authCubit,
-            child: HomePage(
-              prompts: args?['prompts'] as List<CounselingQuestion>? ?? [],
-              medications: args?['medications'] as List<Medication>? ?? [],
-            ),
+          builder: (_) => MultiBlocProvider(
+            providers: [
+              BlocProvider.value(value: authCubit),
+              BlocProvider(
+                create: (_) => PatientCubit(
+                  repository: FirestorePatientRepository(),
+                )..start(),
+              ),
+            ],
+            child: const HomePage(),
           ),
         );
 
@@ -86,9 +91,7 @@ class AppRouter {
 
       case Routes.providerMain:
         final args = settings.arguments as Map<String, dynamic>?;
-
-        final clinicCode = args?['clinicCode'] as String?;
-
+        final clinicCode = args?['clinicCode'] as String? ?? savedClinicCode;
         final normalizedClinicId = clinicCode?.trim().isNotEmpty == true
             ? clinicCode!.trim()
             : 'demo-clinic';
@@ -108,6 +111,7 @@ class AppRouter {
           ),
         );
     }
+
     return null;
   }
 }

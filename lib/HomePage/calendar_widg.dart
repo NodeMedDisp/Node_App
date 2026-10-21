@@ -31,6 +31,19 @@ class CalendarWidget extends StatefulWidget {
   final String? dataOwnerId;
   final int bluetoothRefreshToken;
 
+  /// Whether this device should retain a local copy of recovery activity.
+  final bool useLocalRecoveryCache;
+
+  /// Legacy setup/editor controls are disabled for both patient and provider
+  /// dashboards. Provider programming remains in ProviderMainScreen.
+  final bool showProgramActions;
+
+  /// Called once for each newly parsed NODE recovery entry.
+  final Future<void> Function(
+    DateTime date,
+    List<Map<String, dynamic>> entries,
+  )? onRecoveryProgressReceived;
+
   const CalendarWidget({
     super.key,
     required this.prompts,
@@ -40,6 +53,9 @@ class CalendarWidget extends StatefulWidget {
     this.externalRecoveryProgress,
     this.dataOwnerId,
     this.bluetoothRefreshToken = 0,
+    this.useLocalRecoveryCache = true,
+    this.showProgramActions = false,
+    this.onRecoveryProgressReceived,
   });
 
   @override
@@ -218,14 +234,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
     _focusedDay = widget.externalFocusDay ?? widget.StartDate;
     _selectedDay = _focusedDay;
 
-    // If we are in the provider dashboard, we don't want to load local Hive progress
-    // as that would show the current device's user data for EVERY patient.
-    bool isProvider = false;
-    try {
-      isProvider = context.read<ProviderCubit>().state.selectedUser != null;
-    } catch (_) {}
-
-    if (!isProvider) {
+    if (widget.useLocalRecoveryCache) {
       _loadRecoveryProgress();
     }
 
@@ -243,12 +252,17 @@ class CalendarWidgetState extends State<CalendarWidget> {
   void didUpdateWidget(covariant CalendarWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final patientChanged =
-        oldWidget.dataOwnerId != widget.dataOwnerId;
+    final patientChanged = oldWidget.dataOwnerId != widget.dataOwnerId;
 
     final recoveryChanged =
-        oldWidget.externalRecoveryProgress !=
-            widget.externalRecoveryProgress;
+        oldWidget.externalRecoveryProgress != widget.externalRecoveryProgress;
+
+    final bluetoothRefreshRequested =
+        oldWidget.bluetoothRefreshToken != widget.bluetoothRefreshToken;
+
+    if (bluetoothRefreshRequested) {
+      unawaited(checkBluetoothConnection());
+    }
 
     if (patientChanged) {
       debugPrint(
@@ -256,13 +270,19 @@ class CalendarWidgetState extends State<CalendarWidget> {
         '${oldWidget.dataOwnerId} -> ${widget.dataOwnerId}',
       );
 
-      _focusedDay =
-          widget.externalFocusDay ?? widget.StartDate;
+      _focusedDay = widget.externalFocusDay ?? widget.StartDate;
 
       _selectedDay = _focusedDay;
 
       // Clear the previous patient's recovery data.
       recoveryProgress.clear();
+
+      // Load this owner's isolated local recovery cache before merging cloud
+      // data. This prevents one signed-in patient from seeing another account's
+      // local NODE history on a shared phone.
+      if (widget.useLocalRecoveryCache) {
+        _loadRecoveryProgress();
+      }
 
       // Load the newly selected patient's cloud recovery data.
       if (widget.externalRecoveryProgress != null) {
@@ -360,20 +380,26 @@ class CalendarWidgetState extends State<CalendarWidget> {
     }
   }
 
+  String _localRecoveryStorageKey(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final owner = widget.dataOwnerId?.trim().isNotEmpty == true
+        ? widget.dataOwnerId!.trim()
+        : 'local';
+    return '$owner::${normalized.toIso8601String()}';
+  }
+
   Future<void> _saveRecoveryProgress(
     DateTime date,
     List<Map<String, dynamic>> progress,
   ) async {
+    if (!widget.useLocalRecoveryCache) {
+      return;
+    }
+
     final box = Hive.box<Map>('calendarData');
+    final formattedDate = _localRecoveryStorageKey(date);
 
-    final formattedDate = DateTime(
-      date.year,
-      date.month,
-      date.day,
-    ).toIso8601String();
-
-    final progressToSave =
-        progress.map((entry) {
+    final progressToSave = progress.map((entry) {
       return Map<String, dynamic>.from(entry);
     }).toList();
 
@@ -396,8 +422,18 @@ class CalendarWidgetState extends State<CalendarWidget> {
           continue;
         }
 
+        final rawKey = key.toString();
+        final owner = widget.dataOwnerId?.trim().isNotEmpty == true
+            ? widget.dataOwnerId!.trim()
+            : 'local';
+        final ownerPrefix = '$owner::';
+
+        if (!rawKey.startsWith(ownerPrefix)) {
+          continue;
+        }
+
         final date = DateTime.parse(
-          key.toString(),
+          rawKey.substring(ownerPrefix.length),
         );
 
         final rawProgress = data['progress'];
@@ -410,20 +446,22 @@ class CalendarWidgetState extends State<CalendarWidget> {
           continue;
         }
 
-        final progress =
-            rawProgress.map<Map<String, dynamic>>(
-          (entry) {
-            if (entry is Map) {
-              return Map<String, dynamic>.from(
-                entry,
-              );
-            }
+        final progress = rawProgress
+            .map<Map<String, dynamic>>(
+              (entry) {
+                if (entry is Map) {
+                  return Map<String, dynamic>.from(
+                    entry,
+                  );
+                }
 
-            return <String, dynamic>{};
-          },
-        ).where(
-          (entry) => entry.isNotEmpty,
-        ).toList();
+                return <String, dynamic>{};
+              },
+            )
+            .where(
+              (entry) => entry.isNotEmpty,
+            )
+            .toList();
 
         recoveryProgress[date] = progress;
 
@@ -447,8 +485,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
         if (characteristic.properties.notify) {
           await characteristic.setNotifyValue(true);
           await _bleValueSubscription?.cancel();
-          _bleValueSubscription =
-              characteristic.lastValueStream.listen(
+          _bleValueSubscription = characteristic.lastValueStream.listen(
             (data) {
               _handleFileData(data);
             },
@@ -529,25 +566,18 @@ class CalendarWidgetState extends State<CalendarWidget> {
             recoveryProgress[normalizedDate]!,
           );
 
-          // Provider mode: also save to Firestore.
-          try {
-            final providerCubit =
-                context.read<ProviderCubit>();
-
-            if (providerCubit.state.selectedUser != null) {
-              providerCubit.saveRecoveryProgress(
-                date: normalizedDate,
-                entries: [
-                  Map<String, dynamic>.from(
-                    parsedEntry,
-                  ),
-                ],
-              );
-            }
-          } catch (error) {
-            debugPrint(
-              'CALENDAR: Cloud recovery save skipped/error: '
-              '$error',
+          final cloudSave = widget.onRecoveryProgressReceived;
+          if (cloudSave != null) {
+            unawaited(
+              cloudSave(
+                normalizedDate,
+                [Map<String, dynamic>.from(parsedEntry)],
+              ).catchError((Object error, StackTrace stackTrace) {
+                debugPrint(
+                  'CALENDAR: Cloud recovery save failed: $error',
+                );
+                debugPrintStack(stackTrace: stackTrace);
+              }),
             );
           }
         }
@@ -576,11 +606,6 @@ class CalendarWidgetState extends State<CalendarWidget> {
     final medicationsForDay = _getMedicationsForDay(_selectedDay);
     final recoveryProgressForDay = _getRecoveryProgressForDay(_selectedDay);
 
-    bool isProvider = false;
-    try {
-      isProvider = context.read<ProviderCubit>().state.selectedUser != null;
-    } catch (_) {}
-
     return Scaffold(
       body: SingleChildScrollView(
         child: Padding(
@@ -588,7 +613,7 @@ class CalendarWidgetState extends State<CalendarWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!isProvider) ...[
+              if (widget.showProgramActions) ...[
                 Wrap(
                   spacing: 2,
                   runSpacing: 10,

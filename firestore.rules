@@ -12,10 +12,33 @@ service cloud.firestore {
           /clinics/$(clinicId)/members/$(request.auth.uid);
     }
 
+    function patientLinkPath(uid) {
+      return /databases/$(database)/documents/patientLinks/$(uid);
+    }
+
     function isActiveClinicMember(clinicId) {
       return signedIn()
           && exists(membershipPath(clinicId))
           && get(membershipPath(clinicId)).data.active == true;
+    }
+
+    function isLinkedPatient(clinicId, patientId) {
+      return signedIn()
+          && exists(patientLinkPath(request.auth.uid))
+          && get(patientLinkPath(request.auth.uid)).data.permanent == true
+          && get(patientLinkPath(request.auth.uid)).data.clinicId == clinicId
+          && get(patientLinkPath(request.auth.uid)).data.patientId == patientId;
+    }
+
+    match /patientLinks/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+
+    // Invitations contain email addresses and are intentionally available only
+    // through authenticated callable functions. The Admin SDK bypasses rules.
+    match /patientInvites/{inviteId} {
+      allow read, create, update, delete: if false;
     }
 
     match /clinics/{clinicId} {
@@ -25,27 +48,36 @@ service cloud.firestore {
       match /members/{memberId} {
         allow read: if signedIn()
             && request.auth.uid == memberId;
-
         allow create, update, delete: if false;
       }
 
       match /patients/{patientId} {
-        allow read, create, update, delete:
-            if isActiveClinicMember(clinicId);
+        allow read: if isActiveClinicMember(clinicId)
+            || isLinkedPatient(clinicId, patientId);
+
+        allow create, update, delete: if isActiveClinicMember(clinicId);
 
         match /medications/{medicationId} {
-          allow read, create, update, delete:
-              if isActiveClinicMember(clinicId);
+          allow read: if isActiveClinicMember(clinicId)
+              || isLinkedPatient(clinicId, patientId);
+
+          allow create, update, delete: if isActiveClinicMember(clinicId);
         }
 
         match /prompts/{promptId} {
-          allow read, create, update, delete:
-              if isActiveClinicMember(clinicId);
+          allow read: if isActiveClinicMember(clinicId)
+              || isLinkedPatient(clinicId, patientId);
+
+          allow create, update, delete: if isActiveClinicMember(clinicId);
         }
 
         match /recoveryDays/{recoveryDayId} {
-          allow read, create, update, delete:
-              if isActiveClinicMember(clinicId);
+          allow read: if isActiveClinicMember(clinicId)
+              || isLinkedPatient(clinicId, patientId);
+
+          // Patient recovery writes go through savePatientRecoveryProgress so
+          // the backend can verify the permanent link and validate each entry.
+          allow create, update, delete: if isActiveClinicMember(clinicId);
         }
       }
     }

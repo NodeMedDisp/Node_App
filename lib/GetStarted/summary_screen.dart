@@ -105,35 +105,39 @@ class _RecoverySummaryScreenState extends State<RecoverySummaryScreen> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _sending ? null : () async {
-              setState(() => _sending = true);
-              try {
-                final device = widget.device;
-                if (device == null) {
-                  throw StateError('No NODE device is connected. Nothing was sent.');
-                }
-                final fileContent = await _saveDataToFile();
-                await sendFileToDevice(device, fileContent);
-                if (!context.mounted) return;
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  Routes.homeScreen,
-                  (route) => false,
-                  arguments: {
-                    'prompts': widget.prompts,
-                    'medications': widget.medications,
+            onPressed: _sending
+                ? null
+                : () async {
+                    setState(() => _sending = true);
+                    try {
+                      final device = widget.device;
+                      if (device == null) {
+                        throw StateError(
+                            'No NODE device is connected. Nothing was sent.');
+                      }
+                      final fileContent = await _saveDataToFile();
+                      await sendFileToDevice(device, fileContent);
+                      if (!context.mounted) return;
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        Routes.homeScreen,
+                        (route) => false,
+                        arguments: {
+                          'prompts': widget.prompts,
+                          'medications': widget.medications,
+                        },
+                      );
+                    } catch (error, stackTrace) {
+                      debugPrint('SUMMARY: Program not sent: $error');
+                      debugPrintStack(stackTrace: stackTrace);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text('$error')));
+                      }
+                    } finally {
+                      if (mounted) setState(() => _sending = false);
+                    }
                   },
-                );
-              } catch (error, stackTrace) {
-                debugPrint('SUMMARY: Program not sent: $error');
-                debugPrintStack(stackTrace: stackTrace);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
-                }
-              } finally {
-                if (mounted) setState(() => _sending = false);
-              }
-            },
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 15),
               backgroundColor: Colors.white,

@@ -113,60 +113,76 @@ class _MedicationList extends StatelessWidget {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final medication = state.selectedMedications[index];
-                    final startDate = medication.startDate ?? state.selectedUser?.startDate;
+                    final startDate =
+                        medication.startDate ?? state.selectedUser?.startDate;
 
                     return ListTile(
-                      key: medication.id == null ? null : ValueKey(medication.id),
+                      key: medication.id == null
+                          ? null
+                          : ValueKey(medication.id),
                       title: Text(medication.name),
                       subtitle: Text(
                         '${medication.dose} | ${medication.times}\n'
                         'Start: ${startDate == null ? 'Not set' : MedicationSchedule.dateLabel(startDate)}'
                         ' | ${medication.numDays} days',
                       ),
-                      onTap: state.saving ? null : () async {
-                        final patientId = state.selectedUser?.id;
-                        final updated = await Navigator.push<Medication>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MedicationEntryPage(
-                              medication: medication,
-                              otherMedications: [
-                                for (var i = 0; i < state.selectedMedications.length; i++)
-                                  if (i != index) state.selectedMedications[i],
-                              ],
-                              fallbackStartDate: state.selectedUser?.startDate,
-                            ),
-                          ),
-                        );
-                        if (!context.mounted || updated == null) return;
-                        if (cubit.state.selectedUser?.id != patientId) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('The selected patient changed. Nothing was saved.'),
-                          ));
-                          return;
-                        }
-                        try {
-                          await cubit.updateMedicationForSelectedUser(
-                            updated.copyWith(id: medication.id),
-                          );
-                        } catch (error) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text('Could not save medication: $error'),
-                          ));
-                        }
-                      },
+                      onTap: state.saving
+                          ? null
+                          : () async {
+                              final patientId = state.selectedUser?.id;
+                              final updated = await Navigator.push<Medication>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => MedicationEntryPage(
+                                    medication: medication,
+                                    otherMedications: [
+                                      for (var i = 0;
+                                          i < state.selectedMedications.length;
+                                          i++)
+                                        if (i != index)
+                                          state.selectedMedications[i],
+                                    ],
+                                    fallbackStartDate:
+                                        state.selectedUser?.startDate,
+                                  ),
+                                ),
+                              );
+                              if (!context.mounted || updated == null) return;
+                              if (cubit.state.selectedUser?.id != patientId) {
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(const SnackBar(
+                                  content: Text(
+                                      'The selected patient changed. Nothing was saved.'),
+                                ));
+                                return;
+                              }
+                              try {
+                                await cubit.updateMedicationForSelectedUser(
+                                  updated.copyWith(id: medication.id),
+                                );
+                              } catch (error) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(SnackBar(
+                                  content:
+                                      Text('Could not save medication: $error'),
+                                ));
+                              }
+                            },
                       trailing: IconButton(
                         icon: const Icon(Icons.delete),
                         onPressed: medication.id == null || state.saving
                             ? null
                             : () async {
                                 try {
-                                  await cubit.deleteMedicationFromSelectedUser(medication.id!);
+                                  await cubit.deleteMedicationFromSelectedUser(
+                                      medication.id!);
                                 } catch (error) {
                                   if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text('Could not delete medication: $error'),
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(SnackBar(
+                                    content: Text(
+                                        'Could not delete medication: $error'),
                                   ));
                                 }
                               },
@@ -196,7 +212,8 @@ class _PromptList extends StatelessWidget {
             medications: state.selectedMedications,
             initialPrompt: prompt,
             // Existing legacy records use the patient's start, not today's date.
-            fallbackStartDate: prompt == null ? null : state.selectedUser?.startDate,
+            fallbackStartDate:
+                prompt == null ? null : state.selectedUser?.startDate,
           ),
         ),
       ),
@@ -221,7 +238,8 @@ class _PromptList extends StatelessWidget {
         ),
         Expanded(
           child: state.selectedPrompts.isEmpty
-              ? const Center(child: Text('No counseling questions are configured.'))
+              ? const Center(
+                  child: Text('No counseling questions are configured.'))
               : ListView.separated(
                   itemCount: state.selectedPrompts.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
@@ -229,11 +247,12 @@ class _PromptList extends StatelessWidget {
                     final prompt = state.selectedPrompts[index];
                     final canEdit = prompt.id != null && !state.saving;
                     return ListTile(
-                      key: prompt.id == null ? null : ValueKey('prompt-${prompt.id}'),
+                      key: prompt.id == null
+                          ? null
+                          : ValueKey('prompt-${prompt.id}'),
                       title: Text(prompt.prompt),
                       subtitle: Text(
-                        '${prompt.resReq}\n${PromptSchedule.rangeLabel(
-                          prompt, fallbackStartDate: state.selectedUser?.startDate)}',
+                        '${prompt.resReq}\n${PromptSchedule.rangeLabel(prompt, fallbackStartDate: state.selectedUser?.startDate)}',
                       ),
                       onTap: canEdit ? () => _openForm(context, prompt) : null,
                       trailing: Row(
@@ -242,21 +261,28 @@ class _PromptList extends StatelessWidget {
                           IconButton(
                             tooltip: 'Edit prompt',
                             icon: const Icon(Icons.edit),
-                            onPressed: canEdit ? () => _openForm(context, prompt) : null,
+                            onPressed: canEdit
+                                ? () => _openForm(context, prompt)
+                                : null,
                           ),
                           IconButton(
                             tooltip: 'Delete prompt',
                             icon: const Icon(Icons.delete),
-                            onPressed: !canEdit ? null : () async {
-                              try {
-                                await cubit.deletePromptFromSelectedUser(prompt.id!);
-                              } catch (error) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text('Could not delete prompt: $error'),
-                                ));
-                              }
-                            },
+                            onPressed: !canEdit
+                                ? null
+                                : () async {
+                                    try {
+                                      await cubit.deletePromptFromSelectedUser(
+                                          prompt.id!);
+                                    } catch (error) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(
+                                        content: Text(
+                                            'Could not delete prompt: $error'),
+                                      ));
+                                    }
+                                  },
                           ),
                         ],
                       ),

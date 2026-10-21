@@ -7,41 +7,31 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:rive/rive.dart';
-import 'LoginComp/logic/cubit/auth_cubit.dart'; // Update the import path
-import 'firebase_options.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'LoginComp/logic/cubit/auth_cubit.dart';
 import 'LoginComp/routing/app_router.dart';
 import 'LoginComp/routing/routes.dart';
 import 'LoginComp/theming/colors.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Required for Flutter Web when using Rive
   if (kIsWeb) {
     await RiveFile.initialize();
   }
 
-  debugPrint('Before Hive');
   await Hive.initFlutter();
-
-  // Explicitly clear the Hive box for testing purposes
-  debugPrint('Before Clear Hive');
   await clearHiveBoxForTesting();
-
-  // Open the Hive box after clearing it
-  debugPrint('Before Opening Hive');
   await Hive.openBox<Map>('calendarData');
   await Hive.openBox<Map>('promptsData');
   await Hive.openBox<Map>('medicationsData');
-
-  debugPrint('STARTUP 1: Before Firebase');
 
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     ).timeout(const Duration(seconds: 15));
-
-    debugPrint('STARTUP 2: Firebase initialized');
   } catch (error, stackTrace) {
     debugPrint('STARTUP ERROR: Firebase failed: $error');
     debugPrintStack(stackTrace: stackTrace);
@@ -71,29 +61,26 @@ Future<void> main() async {
     return;
   }
 
-  debugPrint('STARTUP 3: Before reading Firebase user');
-
   User? user;
-
   try {
     user = FirebaseAuth.instance.currentUser;
-    debugPrint('STARTUP 4: Current user read successfully');
-    debugPrint('STARTUP 4A: User signed in = ${user != null}');
-    debugPrint('STARTUP 4B: Email verified = ${user?.emailVerified}');
   } catch (error, stackTrace) {
     debugPrint('STARTUP ERROR: Could not read current user: $error');
     debugPrintStack(stackTrace: stackTrace);
-    user = null;
   }
 
-  final String initialRoute = (user == null || !user.emailVerified)
-      ? Routes.loginScreen
-      : Routes.homeScreen;
+  final preferences = await SharedPreferences.getInstance();
+  final savedUserType = preferences.getString('userType');
+  final savedClinicCode = preferences.getString('clinicCode');
 
-  debugPrint('STARTUP 5: Initial route = $initialRoute');
-  debugPrint('STARTUP 6: Before runApp');
-
-  debugPrint('STARTUP 6: Before runApp');
+  final String initialRoute;
+  if (user == null || !user.emailVerified) {
+    initialRoute = Routes.loginScreen;
+  } else if (savedUserType == 'Provider') {
+    initialRoute = Routes.providerMain;
+  } else {
+    initialRoute = Routes.homeScreen;
+  }
 
   runApp(
     ScreenUtilInit(
@@ -101,34 +88,32 @@ Future<void> main() async {
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
-        debugPrint('STARTUP 7: ScreenUtil initialized');
-
         return BlocProvider(
           create: (_) => AuthCubit(),
           child: MyApp(
-            router: AppRouter(),
+            router: AppRouter(savedClinicCode: savedClinicCode),
             initialRoute: initialRoute,
           ),
         );
       },
     ),
   );
-
-  debugPrint('STARTUP 8: After runApp');
 }
 
 class MyApp extends StatelessWidget {
   final AppRouter router;
   final String initialRoute;
 
-  const MyApp({super.key, required this.router, required this.initialRoute});
+  const MyApp({
+    super.key,
+    required this.router,
+    required this.initialRoute,
+  });
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('STARTUP 9: MyApp build called');
-
     return MaterialApp(
-      title: 'Login & Signup App',
+      title: 'NODE Recovery',
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: ColorsManager.backGreen,
@@ -149,23 +134,17 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Clear a specific Hive box for testing purposes
+/// Retained from the current main branch. Remove this test-only cleanup once
+/// prompts and medications no longer need to be reset on every app start.
 Future<void> clearHiveBoxForTesting() async {
-  final boxName2 = 'promptsData';
-  if (await Hive.boxExists(boxName2)) {
-    print("Clearing Hive box '$boxName2'...");
-    await Hive.deleteBoxFromDisk(boxName2); // Deletes only this box
-    print("Hive box '$boxName2' cleared.");
-  } else {
-    print("Hive box '$boxName2' does not exist; nothing to clear.");
-  }
+  const boxNames = <String>[
+    'promptsData',
+    'medicationsData',
+  ];
 
-  final boxName3 = 'medicationsData';
-  if (await Hive.boxExists(boxName3)) {
-    print("Clearing Hive box '$boxName3'...");
-    await Hive.deleteBoxFromDisk(boxName3); // Deletes only this box
-    print("Hive box '$boxName3' cleared.");
-  } else {
-    print("Hive box '$boxName3' does not exist; nothing to clear.");
+  for (final boxName in boxNames) {
+    if (await Hive.boxExists(boxName)) {
+      await Hive.deleteBoxFromDisk(boxName);
+    }
   }
 }

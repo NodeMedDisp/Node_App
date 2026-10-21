@@ -92,6 +92,24 @@
       "languageVersion": "3.6"
     },
     {
+      "name": "cloud_functions",
+      "rootUri": "file:///C:/Users/JonathonVizmeg/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions-6.3.6",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "cloud_functions_platform_interface",
+      "rootUri": "file:///C:/Users/JonathonVizmeg/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions_platform_interface-6.0.6",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "cloud_functions_web",
+      "rootUri": "file:///C:/Users/JonathonVizmeg/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions_web-5.1.12",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
       "name": "collection",
       "rootUri": "file:///C:/Users/JonathonVizmeg/AppData/Local/Pub/Cache/hosted/pub.dev/collection-1.19.1",
       "packageUri": "lib/",
