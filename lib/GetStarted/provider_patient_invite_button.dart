@@ -24,7 +24,7 @@ class _ProviderPatientInviteButtonState
 
   Future<void> _showInviteDialog() async {
     final formKey = GlobalKey<FormState>();
-    final emailController = TextEditingController();
+      String enteredEmail = '';
 
     final email = await showDialog<String>(
       context: context,
@@ -34,7 +34,9 @@ class _ProviderPatientInviteButtonState
           content: Form(
             key: formKey,
             child: TextFormField(
-              controller: emailController,
+              onSaved: (value) {
+                enteredEmail = value?.trim() ?? '';
+              },
               autofocus: true,
               keyboardType: TextInputType.emailAddress,
               autocorrect: false,
@@ -74,9 +76,11 @@ class _ProviderPatientInviteButtonState
                   return;
                 }
 
+                formKey.currentState!.save();
+
                 Navigator.pop(
                   dialogContext,
-                  emailController.text.trim(),
+                  enteredEmail,
                 );
               },
               icon: const Icon(Icons.send),
@@ -87,7 +91,6 @@ class _ProviderPatientInviteButtonState
       },
     );
 
-    emailController.dispose();
 
     if (email == null || email.isEmpty || !mounted) {
       return;
@@ -100,7 +103,12 @@ class _ProviderPatientInviteButtonState
         region: 'us-central1',
       );
 
-      final callable = functions.httpsCallable('createPatientInvite');
+      final callable = functions.httpsCallable(
+  'createPatientInvite',
+  options: HttpsCallableOptions(
+    timeout: const Duration(seconds: 20),
+  ),
+);
 
       await callable.call<Map<String, dynamic>>(
         <String, dynamic>{
@@ -124,6 +132,9 @@ class _ProviderPatientInviteButtonState
         ),
       );
     } on FirebaseFunctionsException catch (error) {
+      debugPrint(
+        'NODE INVITE FAILED: code=${error.code}, message=${error.message}',
+      );
       if (!mounted) {
         return;
       }
