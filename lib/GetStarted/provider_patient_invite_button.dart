@@ -95,7 +95,6 @@ class _ProviderPatientInviteButtonState
     if (email == null || email.isEmpty || !mounted) {
       return;
     }
-
     setState(() => _sending = true);
 
     try {
