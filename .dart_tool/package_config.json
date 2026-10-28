@@ -92,6 +92,24 @@
       "languageVersion": "3.6"
     },
     {
+      "name": "cloud_functions",
+      "rootUri": "file:///C:/Users/adamc/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions-6.5.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "cloud_functions_platform_interface",
+      "rootUri": "file:///C:/Users/adamc/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions_platform_interface-6.0.7",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "cloud_functions_web",
+      "rootUri": "file:///C:/Users/adamc/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions_web-5.1.13",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
       "name": "code_assets",
       "rootUri": "file:///C:/Users/adamc/AppData/Local/Pub/Cache/hosted/pub.dev/code_assets-1.2.1",
       "packageUri": "lib/",
@@ -831,8 +849,8 @@
     }
   ],
   "generator": "pub",
-  "generatorVersion": "3.13.5",
+  "generatorVersion": "3.13.7",
   "flutterRoot": "file:///C:/Users/adamc/Delevop/flutter_windows_3.47.7-stable/flutter",
-  "flutterVersion": "3.47.7",
+  "flutterVersion": "3.47.8",
   "pubCache": "file:///C:/Users/adamc/AppData/Local/Pub/Cache"
 }
