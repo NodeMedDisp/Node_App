@@ -7,9 +7,9 @@
         <compositeConfiguration>
           <compositeBuild compositeDefinitionSource="SCRIPT">
             <builds>
-              <build path="$PROJECT_DIR$/../../../../flutter/src/flutter/packages/flutter_tools/gradle" name="gradle">
+              <build path="$USER_HOME$/Delevop/flutter_windows_3.47.7-stable/flutter/packages/flutter_tools/gradle" name="gradle">
                 <projects>
-                  <project path="$PROJECT_DIR$/../../../../flutter/src/flutter/packages/flutter_tools/gradle" />
+                  <project path="$USER_HOME$/Delevop/flutter_windows_3.47.7-stable/flutter/packages/flutter_tools/gradle" />
                 </projects>
               </build>
             </builds>
@@ -20,9 +20,9 @@
         <option name="gradleJvm" value="jbr-17 (2)" />
         <option name="modules">
           <set>
+            <option value="$USER_HOME$/Delevop/flutter_windows_3.47.7-stable/flutter/packages/flutter_tools/gradle" />
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
-            <option value="$PROJECT_DIR$/../../../../flutter/src/flutter/packages/flutter_tools/gradle" />
           </set>
         </option>
       </GradleProjectSettings>
