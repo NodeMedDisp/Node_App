@@ -12,6 +12,7 @@ import 'firebase_options.dart';
 import 'LoginComp/routing/app_router.dart';
 import 'LoginComp/routing/routes.dart';
 import 'LoginComp/theming/colors.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -86,13 +87,25 @@ Future<void> main() async {
     user = null;
   }
 
+  String userType = 'User';
+  String? initialClinicCode;
+
+  if (user != null && user.emailVerified) {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      userType = prefs.getString('userType') ?? 'User';
+      initialClinicCode = prefs.getString('clinicCode');
+      debugPrint('STARTUP 4C: Restored userType = $userType, clinicCode = $initialClinicCode');
+    } catch (e) {
+      debugPrint('STARTUP ERROR: Could not read user role from SharedPreferences: $e');
+    }
+  }
+
   final String initialRoute = (user == null || !user.emailVerified)
       ? Routes.loginScreen
-      : Routes.homeScreen;
+      : (userType == 'Provider' ? Routes.providerMain : Routes.homeScreen);
 
   debugPrint('STARTUP 5: Initial route = $initialRoute');
-  debugPrint('STARTUP 6: Before runApp');
-
   debugPrint('STARTUP 6: Before runApp');
 
   runApp(
@@ -106,7 +119,7 @@ Future<void> main() async {
         return BlocProvider(
           create: (_) => AuthCubit(),
           child: MyApp(
-            router: AppRouter(),
+            router: AppRouter(initialClinicCode: initialClinicCode),
             initialRoute: initialRoute,
           ),
         );

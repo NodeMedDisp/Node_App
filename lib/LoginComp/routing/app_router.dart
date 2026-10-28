@@ -17,8 +17,9 @@ import 'routes.dart';
 
 class AppRouter {
   late AuthCubit authCubit;
+  final String? initialClinicCode;
 
-  AppRouter() {
+  AppRouter({this.initialClinicCode}) {
     authCubit = AuthCubit();
   }
 
@@ -91,7 +92,9 @@ class AppRouter {
 
         final normalizedClinicId = clinicCode?.trim().isNotEmpty == true
             ? clinicCode!.trim()
-            : 'demo-clinic';
+            : (initialClinicCode?.trim().isNotEmpty == true
+                ? initialClinicCode!.trim()
+                : 'demo-clinic');
 
         debugPrint(
           'ROUTER: Opening provider clinic=$normalizedClinicId',
